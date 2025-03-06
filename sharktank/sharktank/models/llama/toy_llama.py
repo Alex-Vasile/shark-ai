@@ -28,12 +28,13 @@ def generate(seed):
     attention_head_count_kv = 4
     rope_dimension_count = 32
     vocabulary_size = 256
+    block_count = 4  # TODO: Revert at end
 
     config = LlamaModelConfig(
         hp=LlamaHParams(
             context_length=block_seq_stride * max_blocks,
             embedding_length=attention_head_count * attn_head_dim,
-            block_count=3,
+            block_count=block_count,
             feed_forward_length=23,
             rope_dimension_count=rope_dimension_count,
             rope_freq_base=500000.0,
