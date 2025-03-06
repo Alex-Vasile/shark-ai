@@ -7,7 +7,7 @@
 """Export support for the PagedLLMV1 protocol of models."""
 
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 import torch
 
 from iree.turbine.aot import *
@@ -23,6 +23,34 @@ from ..models.llama.sharding import shard_theta
 from ..models.mixtral.mixtral import *
 from ..models.grok.grok import *
 from .. import ops
+
+# TODO: Modifies original theta than make a new one. Should that change?
+def pipeline_parallelize_theta(theta: Theta, pipeline_parallelism_size: int):
+    """Pipeline parallelize theta."""
+    # TODO: Still modifies the shards, but the signature doesn't imply this
+    def f(tensor: ShardedTensor, devices: Tuple[int, ...]) -> ShardedTensor:
+        for i, shard in enumerate(tensor.shards):
+            DeviceTensorTrait(devices[i]).set(shard._data)
+        return tensor.clone(devices=devices)
+
+    shard_count = theta.tensor("token_embd")["weight"].shard_count
+    num_blocks = len(theta.tensor("blk"))
+
+    # Nothing to do for token_embd, already pinned and on correct devices.
+
+    for blk_idx in theta.tensor("blk").keys():
+        pp_group = int(int(blk_idx) * pipeline_parallelism_size / num_blocks)
+        zero_4_group = shard_count * pp_group
+        devices = tuple(i + zero_4_group for i in range(shard_count))
+
+        block_data = theta.tensor("blk", blk_idx)
+        for t_name in block_data.keys():
+            block_data[t_name]["weight"] = f(block_data[t_name]["weight"], devices)
+
+    theta.tensor("output_norm")["weight"] = f(
+        theta.tensor("output_norm")["weight"], devices
+    )
+    theta.tensor("output")["weight"] = f(theta.tensor("output")["weight"], devices)
 
 
 def main():
@@ -84,6 +112,9 @@ def main():
         if "tensor_parallelism_size" in dataset.properties
         else args.tensor_parallelism_size
     )
+
+    pipeline_parallelize_theta(dataset.root_theta, args.pipeline_parallelism_size)
+
     llama_config = LlamaModelConfig(
         hp,
         tensor_parallelism_size=tensor_parallelism_size,
