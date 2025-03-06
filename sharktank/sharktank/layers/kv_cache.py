@@ -61,6 +61,7 @@ class PagedKVCache:
         device: Optional[torch.device] = None,
         shard_count: int = 1,
         pipeline_to_device_lookup: Tuple[Tuple[int, ...], ...] = None,
+        block_to_pipeline_lookup: Tuple[int, ...] = None,
     ):
         self.transformer_block_count = transformer_block_count
         self.attn_head_count = attn_head_count
@@ -70,46 +71,58 @@ class PagedKVCache:
         self.shard_count = shard_count
         if pipeline_to_device_lookup is None:
             pipeline_to_device_lookup = (tuple(range(self.shard_count)), )
-        assert all(
-            len(pipeline_to_device_lookup[0]) == len(lookup)
-            for lookup
-            in pipeline_to_device_lookup[1:]
-        )
         self.pipeline_to_device_lookup = pipeline_to_device_lookup
+        if block_to_pipeline_lookup is None:
+            block_to_pipeline_lookup = tuple(0 for _ in range(transformer_block_count))
+        assert all(
+            table >= 0
+            for table in block_to_pipeline_lookup
+        )
+        self.block_to_table_lookup = block_to_pipeline_lookup
         self.pipeline_count = len(pipeline_to_device_lookup)
+        # TODO: Ensure that block_to_table_lookup and pipeline_count are consistent
         
         if attn_head_count % shard_count != 0:
             raise ValueError(
                 f"The attention head count {attn_head_count} must be a multiple of the tensor parallelism size {shard_count}."
             )
 
+        pipeline_to_block_count = [0 for _ in range(self.pipeline_count)]
+        for pipeline in block_to_pipeline_lookup:
+            pipeline_to_block_count[pipeline] += 1
+
         # Some derived values based on attributes.
         self.sub_page_dims = [
-            self.transformer_block_count,
-            self.cache_partition_count,
-            self.block_seq_stride,
-            self.attn_head_count // self.shard_count,
-            self.attn_head_dim,
+            [
+                pipeline_to_block_count[pipeline],
+                self.cache_partition_count,
+                self.block_seq_stride,
+                self.attn_head_count // self.shard_count,
+                self.attn_head_dim,
+            ]
+            for pipeline in range(self.pipeline_count)
         ]
-        self.page_slab_flat_dim = math.prod(self.sub_page_dims)
+        self.page_slab_flat_dims = [math.prod(sub_page_dim) for sub_page_dim in self.sub_page_dims]
         self.device = device
         self.dtype = dtype
 
     def unflatten_page_tables(
         self, state: list[Union[torch.Tensor, SplitPrimitiveTensor]]
-    ) -> Union[torch.Tensor, SplitPrimitiveTensor]:
-        """Unflattens the 2D page table to a 6D tensor."""
-        assert len(state) == 1, f"Expected 1-element state. Got: {len(state)}"
-        page_slab = state[0]
+    ) -> list[Union[torch.Tensor, SplitPrimitiveTensor]]:
+        """Unflattens the 2D page tables to 6D tensors."""
+        assert len(state) == self.pipeline_count, f"Expected {self.pipeline_count}-element state. Got: {len(state)}"
         if self.shard_count == 1:
-            assert not isinstance(page_slab, SplitPrimitiveTensor)
-            return page_slab.unflatten(1, self.sub_page_dims)
+            assert all(not isinstance(page_slab, SplitPrimitiveTensor) for page_slab in state)
+            return [page_slab.unflatten(1, self.sub_page_dims[pipeline]) for pipeline, page_slab in enumerate(state)]
         else:
-            assert self.shard_count == page_slab.shard_count
-            shards = [
-                shard.unflatten(1, self.sub_page_dims) for shard in page_slab.shards
-            ]
-            return SplitPrimitiveTensor(ts=shards, shard_dim=4)
+            assert all(page_slab.shard_count == self.shard_count for page_slab in state)
+            unflattened = []
+            for pipeline, page_slab in enumerate(state):
+                shards = [
+                    shard.unflatten(1, self.sub_page_dims[pipeline]) for shard in page_slab.shards
+                ]
+                SplitPrimitiveTensor(ts=shards, shard_dim=4, devices=page_slab.devices, pinned=page_slab.pinned)
+            return unflattened
 
     def shard_state(
         self, state: List[torch.Tensor]
@@ -132,14 +145,21 @@ class PagedKVCache:
                 self.attn_head_dim,
             ]
         )
-        sharded_page_table = ops.reshard_split(
-            page_table, dim=4, count=self.shard_count
-        )
-        shards = [
-            ops.flatten(shard, start_dim=1) for shard in sharded_page_table.shards
-        ]
-        flat_sharded_page_table = SplitPrimitiveTensor(ts=shards, shard_dim=1)
-        return [flat_sharded_page_table]
+
+        flat_sharded_page_tables = []
+        for pipeline in range(self.pipeline_count):
+            
+
+            sharded_page_table = ops.reshard_split(
+                page_table, dim=4, count=self.shard_count
+            )
+            shards_flattened = [
+                ops.flatten(shard, start_dim=1) for shard in sharded_page_table.shards
+            ]
+            flat_sharded_page_tables.append(
+                SplitPrimitiveTensor(ts=shards_flattened, shard_dim=1, devices=self.pipeline_to_device_lookup[pipeline], pinned=True)
+            )
+        return flat_sharded_page_tables
 
     @property
     def pad_sequence_stride(self) -> int:
@@ -154,13 +174,13 @@ class PagedKVCache:
         shards = [
             [
                 torch.empty(
-                    [page_count, self.page_slab_flat_dim],
+                    [page_count, self.page_slab_flat_dims[pipeline]],
                     dtype=self.dtype,
                     device=self.device,
                 )
                 for _ in range(self.shard_count)
             ]
-            for _ in range(self.pipeline_count)
+            for pipeline in range(self.pipeline_count)
         ]
 
         if self.shard_count == 1:
@@ -194,7 +214,8 @@ class PagedKVCache:
         approach to reading by materializing linearly may not be terribly
         efficient unless if the compiler can fuse the gather.
         """
-        page_table = self.unflatten_page_table(state)  # 6D
+        page_tables = self.unflatten_page_tables(state)  # 6D
+        page_table = page_tables[self.block_to_table_indx[transformer_block_index]]
 
         bs, block_seq_len, *_ = page_ids.shape
         # Blocks dim 1,2 according to the configured block stride.
@@ -242,7 +263,7 @@ class PagedKVCache:
         dynamic.
         """
         device = self.device
-        page_table = self.unflatten_page_table(state)  # 6D
+        page_tables = self.unflatten_page_tables(state)  # 6D
         page_table = page_table.flatten(0, 3)
         bs, *_ = seq_positions.shape
         assert len(cache_partitions) == self.cache_partition_count
@@ -305,7 +326,7 @@ class PagedKVCache:
         This is the inverse of the linear read. The same caveat applies if the
         in-place scatter cannot be fused.
         """
-        page_table = self.unflatten_page_table(state)  # 6D
+        page_tables = self.unflatten_page_tables(state)  # 6D
 
         bs, block_seq_len, *_ = page_ids.shape
 
