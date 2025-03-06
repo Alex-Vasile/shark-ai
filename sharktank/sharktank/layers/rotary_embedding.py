@@ -83,7 +83,9 @@ class RotaryEmbeddingLayer(BaseLayer):
             )
             for xt_shard, rotary_shard in zip(xt.shards, rotary_shards)
         ]
-        xt = SplitPrimitiveTensor(ts=xt_shards, shard_dim=xt.shard_dim)
+        xt = SplitPrimitiveTensor(
+            ts=xt_shards, shard_dim=xt.shard_dim, devices=xt.devices
+        )
         return xt
 
     def _create_interleaved_tensor(_, dim):
@@ -228,7 +230,9 @@ class RotaryEmbeddingLayer(BaseLayer):
             )
             for xt_shard, mask_shard in zip(xt.shards, mask.shards)
         ]
-        xt = SplitPrimitiveTensor(ts=xt_shards, shard_dim=xt.shard_dim)
+        xt = SplitPrimitiveTensor(
+            ts=xt_shards, shard_dim=xt.shard_dim, devices=xt.devices
+        )
         return xt
 
     def apply_batched_mask_unsharded(self, *, xt: torch.Tensor, mask: torch.Tensor):
