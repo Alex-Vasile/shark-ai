@@ -163,7 +163,7 @@ def main():
             return unpacked, shard_dim, dynamic_shapes, arg_affinities
 
         elif model.config.kv_cache_type == "direct":
-            cache_state = model.cache.allocate(bs=1)
+            cache_state = model.cache.allocate(bs=1)  # TODO: Where is this from?
             # Direct cache dimensions:
             #   2 * transformer_block_count of...
             #   [bs, seq_length, attn_head_count, attn_head_dim]
