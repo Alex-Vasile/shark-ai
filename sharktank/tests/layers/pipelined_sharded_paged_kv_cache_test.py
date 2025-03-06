@@ -67,7 +67,6 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
     def make_unsharded_and_sharded_equal_cache_states(
         self,
     ) -> Tuple[List[torch.Tensor], List[SplitPrimitiveTensor]]:
-        # TODO
         cache_state = self.cache.allocate(self.page_count)
         cache_state[0] = torch.rand_like(cache_state[0])
         sharded_cache_state = self.sharded_cache.shard_state(deepcopy(cache_state))

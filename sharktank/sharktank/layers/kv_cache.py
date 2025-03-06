@@ -87,14 +87,14 @@ class PagedKVCache:
                 f"The attention head count {attn_head_count} must be a multiple of the tensor parallelism size {shard_count}."
             )
 
-        pipeline_to_block_count = [0 for _ in range(self.pipeline_count)]
+        self.pipeline_to_block_count = [0 for _ in range(self.pipeline_count)]
         for pipeline in block_to_pipeline_lookup:
-            pipeline_to_block_count[pipeline] += 1
+            self.pipeline_to_block_count[pipeline] += 1
 
         # Some derived values based on attributes.
         self.sub_page_dims = [
             [
-                pipeline_to_block_count[pipeline],
+                self.pipeline_to_block_count[pipeline],
                 self.cache_partition_count,
                 self.block_seq_stride,
                 self.attn_head_count // self.shard_count,
@@ -148,10 +148,9 @@ class PagedKVCache:
 
         flat_sharded_page_tables = []
         for pipeline in range(self.pipeline_count):
-            
-
+            # TODO: Do I need to make copies here, or are views enough?
             sharded_page_table = ops.reshard_split(
-                page_table, dim=4, count=self.shard_count
+                page_table[:, self.pipeline_to_block_count[pipeline], ...], dim=4, count=self.shard_count
             )
             shards_flattened = [
                 ops.flatten(shard, start_dim=1) for shard in sharded_page_table.shards
@@ -215,7 +214,7 @@ class PagedKVCache:
         efficient unless if the compiler can fuse the gather.
         """
         page_tables = self.unflatten_page_tables(state)  # 6D
-        page_table = page_tables[self.block_to_table_indx[transformer_block_index]]
+        page_table = page_tables[self.block_to_table_lookup[transformer_block_index]]
 
         bs, block_seq_len, *_ = page_ids.shape
         # Blocks dim 1,2 according to the configured block stride.
@@ -264,6 +263,7 @@ class PagedKVCache:
         """
         device = self.device
         page_tables = self.unflatten_page_tables(state)  # 6D
+        page_table = page_tables[self.block_to_table_lookup[transformer_block_index]]
         page_table = page_table.flatten(0, 3)
         bs, *_ = seq_positions.shape
         assert len(cache_partitions) == self.cache_partition_count
@@ -327,7 +327,7 @@ class PagedKVCache:
         in-place scatter cannot be fused.
         """
         page_tables = self.unflatten_page_tables(state)  # 6D
-
+        page_table = page_tables[self.block_to_table_lookup[transformer_block_index]]
         bs, block_seq_len, *_ = page_ids.shape
 
         # Reshape the page cache into sub-blocks so that we can index at the
