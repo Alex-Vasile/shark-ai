@@ -203,9 +203,9 @@ class ShardedLlamaTest(unittest.TestCase):
         )
         expected_cache_state = prefill_kwargs["cache_state"][0]
         actual_cache_state = ops.unshard(
-            sharded_model.cache.unflatten_page_table(
+            sharded_model.cache.unflatten_page_tables(
                 sharded_prefill_kwargs["cache_state"]
-            )
+            )[0]
         ).flatten(start_dim=1)
         torch.testing.assert_close(
             actual_cache_state, expected_cache_state, atol=1e-4, rtol=1e-1
@@ -224,9 +224,9 @@ class ShardedLlamaTest(unittest.TestCase):
         )
         expected_decode_cache_state = decode_kwargs["cache_state"][0]
         actual_decode_cache_state = ops.unshard(
-            sharded_model.cache.unflatten_page_table(
+            sharded_model.cache.unflatten_page_tables(
                 sharded_decode_kwargs["cache_state"]
-            )
+            )[0]
         ).flatten(start_dim=1)
         # TODO: investigate why the Windows machine CI is producing a larger numerical
         # error.
