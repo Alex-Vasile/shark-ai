@@ -8,7 +8,8 @@ from typing import Optional
 
 
 import torch
-from ..types import QuantizerTensor, StaticScaledQuantizer
+import torch.nn.functional as F
+from ..types import QuantizerTensor, ShardedTensor, StaticScaledQuantizer
 from .base import Theta, ThetaLayer
 from .linear import LinearLayer
 from .norm import RMSNormLayer
@@ -193,6 +194,11 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         attn_output = self.attn_output(attn_output)
         attn_output = self.attn_output_norm(attn_output)
 
+        # TODO: Move to front
+        if isinstance(h, ShardedTensor) and any(
+            h_d != attn_d for h_d, attn_d in zip(h.devices, attn_output.devices)
+        ):
+            h = h.clone(devices=attn_output.devices)
         h = h + attn_output
         return h
 
