@@ -32,6 +32,8 @@ def pipeline_parallelize_theta(theta: Theta, pipeline_parallelism_size: int):
             DeviceTensorTrait(devices[i]).set(shard._data)
         return tensor.clone(devices=devices)
 
+    # TODO: SHould token_embd, output_norm and output tensors be considered when splitting the workload across GPUs?
+
     shard_count = theta.tensor('token_embd')['weight'].shard_count
     num_blocks = len(theta.tensor('blk'))
     
