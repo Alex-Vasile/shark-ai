@@ -23,11 +23,6 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         torch.set_default_dtype(self.dtype)
         self.shard_count = 2
         self.pipeline_count = 2
-        self.pipeline_to_device_lookup = tuple(
-            tuple(range(self.shard_count*i, self.shard_count*(i+1)))
-            for i
-            in range(self.pipeline_count)
-        )
         self.transformer_block_count = 5
         self.attn_head_count = self.shard_count * 7
         self.block_seq_stride = 19
@@ -37,6 +32,17 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         self.batch_size = 11
         self.block_seq_len = 2
         self.max_seq_len = self.block_seq_len * self.block_seq_stride
+
+        block_to_pipeline_lookup = []
+        pipeline_to_device_lookup = [None for _ in range(self.pipeline_count)]
+        for block in range(self.transformer_block_count):
+            pp_group = int(block * self.pipeline_count / self.transformer_block_count)
+            zero_4_group = self.shard_count * pp_group
+            devices = tuple(i + zero_4_group for i in range(self.shard_count))
+            block_to_pipeline_lookup.append(pp_group)
+            pipeline_to_device_lookup[pp_group] = devices
+        self.block_to_pipeline_lookup = tuple(block_to_pipeline_lookup)
+        self.pipeline_to_device_lookup = tuple(pipeline_to_device_lookup)
 
         self.cache = PagedKVCache(
             transformer_block_count=self.transformer_block_count,
@@ -49,6 +55,7 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         self.sharded_cache = PagedKVCache(
             shard_count=self.shard_count,
             pipeline_to_device_lookup=self.pipeline_to_device_lookup,
+            block_to_pipeline_lookup=self.block_to_pipeline_lookup,
             transformer_block_count=self.transformer_block_count,
             attn_head_count=self.attn_head_count,
             block_seq_stride=self.block_seq_stride,
@@ -76,7 +83,7 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
     ):
         # TODO
         sharded_state_as_unsharded = ops.unshard(
-            self.sharded_cache.unflatten_page_table(sharded_cache_state)
+            self.sharded_cache.unflatten_page_tables(sharded_cache_state)
         ).flatten(start_dim=1)
         assert ops.equal(
             cache_state[0],
@@ -89,7 +96,8 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         assert len(cache_state) == 1
         assert len(sharded_cache_state) == self.pipeline_count
         assert all(t.pinned for t in sharded_cache_state)
-        assert iterables_equal(cache_state[0].shape, sharded_cache_state[0].shape)
+        assert all(t.shape[0] == self.page_count for t in cache_state)
+        assert cache_state[0].shape[1] == sum(t.shape[1] for t in sharded_cache_state)
         assert all(t.shard_dim == 1 for t in sharded_cache_state)
         assert all(t.shard_count == self.shard_count for t in sharded_cache_state)
 
@@ -101,12 +109,15 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         sharded_unflattened_cache_state = self.sharded_cache.unflatten_page_tables(
             sharded_cache_state
         )
-        assert iterables_equal(
-            unflattened_cache_state.shape, sharded_unflattened_cache_state.shape
+        assert all(
+            iterables_equal(
+                sharded_page_slab.shape, unflattened_cache_state[0].shape
+            )
+            for sharded_page_slab in sharded_unflattened_cache_state
         )
-        assert sharded_unflattened_cache_state.shard_dim == 4
-        assert sharded_unflattened_cache_state.shard_count == self.shard_count
-        assert sharded_unflattened_cache_state.shape[0] == self.page_count
+        assert all(sharded_page_slab.shard_dim == 4 for sharded_page_slab in sharded_unflattened_cache_state)
+        assert all(sharded_page_slab.shard_count == self.shard_count for sharded_page_slab in sharded_unflattened_cache_state)
+        assert all(sharded_page_slab.shape[0] == self.page_count for sharded_page_slab in sharded_unflattened_cache_state)
 
     def testRead(self):
         (
