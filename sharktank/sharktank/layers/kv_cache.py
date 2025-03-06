@@ -11,7 +11,7 @@ tightly coupled transformer blocks a bit less "stringy" with loose tensors
 and dims floating around everywhere.
 """
 
-from typing import Optional, Union, List
+from typing import Optional, Tuple, Union, List
 
 import abc
 import math
@@ -60,6 +60,7 @@ class PagedKVCache:
         dtype: torch.dtype = torch.float32,
         device: Optional[torch.device] = None,
         shard_count: int = 1,
+        pipeline_to_device_lookup: Tuple[Tuple[int, ...], ...] = None,
     ):
         self.transformer_block_count = transformer_block_count
         self.attn_head_count = attn_head_count
@@ -67,6 +68,16 @@ class PagedKVCache:
         self.cache_partition_count = cache_partition_count
         self.block_seq_stride = block_seq_stride
         self.shard_count = shard_count
+        if pipeline_to_device_lookup is None:
+            pipeline_to_device_lookup = (tuple(range(self.shard_count)), )
+        assert all(
+            len(pipeline_to_device_lookup[0]) == len(lookup)
+            for lookup
+            in pipeline_to_device_lookup[1:]
+        )
+        self.pipeline_to_device_lookup = pipeline_to_device_lookup
+        self.pipeline_count = len(pipeline_to_device_lookup)
+        
         if attn_head_count % shard_count != 0:
             raise ValueError(
                 f"The attention head count {attn_head_count} must be a multiple of the tensor parallelism size {shard_count}."
@@ -141,18 +152,26 @@ class PagedKVCache:
         pages.
         """
         shards = [
-            torch.empty(
-                [page_count, self.page_slab_flat_dim],
-                dtype=self.dtype,
-                device=self.device,
-            )
-            for _ in range(self.shard_count)
+            [
+                torch.empty(
+                    [page_count, self.page_slab_flat_dim],
+                    dtype=self.dtype,
+                    device=self.device,
+                )
+                for _ in range(self.shard_count)
+            ]
+            for _ in range(self.pipeline_count)
         ]
 
         if self.shard_count == 1:
-            return shards
+            assert self.pipeline_count == 1
+            return shards[0]
 
-        return [SplitPrimitiveTensor(ts=shards, shard_dim=1)]
+        return [
+            SplitPrimitiveTensor(ts=shards[i], shard_dim=1, devices=devices, pinned=True)
+            for i, devices
+            in enumerate(self.pipeline_to_device_lookup)
+        ]
 
     def read(
         self,
