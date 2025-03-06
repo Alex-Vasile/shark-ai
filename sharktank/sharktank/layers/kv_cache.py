@@ -95,7 +95,7 @@ class PagedKVCache:
         self.device = device
         self.dtype = dtype
 
-    def unflatten_page_table(
+    def unflatten_page_tables(
         self, state: list[Union[torch.Tensor, SplitPrimitiveTensor]]
     ) -> Union[torch.Tensor, SplitPrimitiveTensor]:
         """Unflattens the 2D page table to a 6D tensor."""
