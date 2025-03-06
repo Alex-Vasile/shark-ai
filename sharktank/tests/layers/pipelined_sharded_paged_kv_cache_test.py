@@ -97,8 +97,8 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         cache_state = self.cache.allocate(self.page_count)
         sharded_cache_state = self.sharded_cache.allocate(self.page_count)
 
-        unflattened_cache_state = self.cache.unflatten_page_table(cache_state)
-        sharded_unflattened_cache_state = self.sharded_cache.unflatten_page_table(
+        unflattened_cache_state = self.cache.unflatten_page_tables(cache_state)
+        sharded_unflattened_cache_state = self.sharded_cache.unflatten_page_tables(
             sharded_cache_state
         )
         assert iterables_equal(
