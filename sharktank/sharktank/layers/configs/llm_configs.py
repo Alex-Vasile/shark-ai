@@ -192,6 +192,10 @@ class LlamaModelConfig:
     # arguments.
     tensor_parallelism_size: int = 1
 
+    # How many groups of (roughly) uniform size to
+    # If greater than 1, the model will re-wrap
+    pipeline_parallelism_size: int = 1
+
     # Which attention kernel to use.
     attention_kernel: str = "torch"
 
