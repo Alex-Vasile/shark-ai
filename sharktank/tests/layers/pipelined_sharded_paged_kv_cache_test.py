@@ -109,14 +109,21 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
             sharded_cache_state
         )
         assert all(
-            iterables_equal(
-                sharded_page_slab.shape, unflattened_cache_state[0].shape
-            )
+            iterables_equal(sharded_page_slab.shape, unflattened_cache_state[0].shape)
             for sharded_page_slab in sharded_unflattened_cache_state
         )
-        assert all(sharded_page_slab.shard_dim == 4 for sharded_page_slab in sharded_unflattened_cache_state)
-        assert all(sharded_page_slab.shard_count == self.shard_count for sharded_page_slab in sharded_unflattened_cache_state)
-        assert all(sharded_page_slab.shape[0] == self.page_count for sharded_page_slab in sharded_unflattened_cache_state)
+        assert all(
+            sharded_page_slab.shard_dim == 4
+            for sharded_page_slab in sharded_unflattened_cache_state
+        )
+        assert all(
+            sharded_page_slab.shard_count == self.shard_count
+            for sharded_page_slab in sharded_unflattened_cache_state
+        )
+        assert all(
+            sharded_page_slab.shape[0] == self.page_count
+            for sharded_page_slab in sharded_unflattened_cache_state
+        )
 
     def testRead(self):
         (
