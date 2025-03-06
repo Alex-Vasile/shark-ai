@@ -32,6 +32,8 @@ def pipeline_parallelize_theta(theta: Theta, pipeline_parallelism_size: int):
             DeviceTensorTrait(devices[i]).set(shard._data)
         return tensor.clone(devices=devices)
 
+    # TODO: SHould token_embd, output_norm and output tensors be considered when splitting the workload across GPUs?
+
     shard_count = theta.tensor('token_embd')['weight'].shard_count
     num_blocks = len(theta.tensor('blk'))
     
@@ -165,6 +167,7 @@ def main():
 
     def setup_cache(model, shard_count):
         if model.config.kv_cache_type == "paged":
+            # TODO: Write the PP and TP into the cache state
             cache_state = model.cache.allocate(
                 page_count=hp.context_length // llama_config.block_seq_stride
             )
@@ -175,6 +178,10 @@ def main():
             arg_affinities = {}
             shard_dim = None
 
+            if llama_config.pipeline_parallelism_size > 1:
+                pass  # TODO
+
+            # TODO: This should go into the cache __init__
             # Need to unpacke that state when sharded
             if llama_config.tensor_parallelism_size > 1:
                 shard_dim = cache_state[0].shard_dim
