@@ -14,7 +14,7 @@ from sharktank import ops
 from sharktank.types import SplitPrimitiveTensor
 
 
-class PipelinedPagedKVCacheTest(unittest.TestCase):
+class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
     """Verify that the pipelined sharded paged KV cache behaves as the unpipelined unsharded variant."""
 
     def setUp(self):
@@ -88,9 +88,10 @@ class PipelinedPagedKVCacheTest(unittest.TestCase):
         sharded_cache_state = self.sharded_cache.allocate(self.page_count)
         assert len(cache_state) == 1
         assert len(sharded_cache_state) == self.pipeline_count
+        assert all(t.pinned for t in sharded_cache_state)
         assert iterables_equal(cache_state[0].shape, sharded_cache_state[0].shape)
-        assert sharded_cache_state[0].shard_dim == 1
-        assert sharded_cache_state[0].shard_count == self.shard_count
+        assert all(t.shard_dim == 1 for t in sharded_cache_state)
+        assert all(t.shard_count == self.shard_count for t in sharded_cache_state)
 
     def testUnflattenPageTable(self):
         cache_state = self.cache.allocate(self.page_count)
