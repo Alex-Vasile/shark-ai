@@ -176,7 +176,7 @@ def main():
                 pass  # TODO
 
             # TODO: This should go into the cache __init__
-            # Need to unpacke that state when sharded
+            # Need to unpack that state when sharded (for tracing support reasons)
             if llama_config.tensor_parallelism_size > 1:
                 shard_dim = cache_state[0].shard_dim
 
