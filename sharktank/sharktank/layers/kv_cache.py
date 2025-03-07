@@ -84,10 +84,10 @@ class PagedKVCache:
                 f"The attention head count {attn_head_count} must be a multiple of the tensor parallelism size {shard_count}."
             )
 
-        self.pipeline_to_block_count = [0 for _ in range(self.pipeline_count)]
-        for pipeline in block_to_pipeline_lookup:
-            self.pipeline_to_block_count[pipeline] += 1
-
+        self.pipeline_to_block_count = tuple(
+            sum(1 for block in block_to_pipeline_lookup if block == i)
+            for i in range(self.pipeline_count)
+        )
         # Some derived values based on attributes.
         self.sub_page_dims = [
             [
@@ -128,11 +128,13 @@ class PagedKVCache:
                     shard.unflatten(1, self.sub_page_dims[pipeline])
                     for shard in page_slab.shards
                 ]
-                SplitPrimitiveTensor(
-                    ts=shards,
-                    shard_dim=4,
-                    devices=page_slab.devices,
-                    pinned=page_slab.pinned,
+                unflattened.append(
+                    SplitPrimitiveTensor(
+                        ts=shards,
+                        shard_dim=4,
+                        devices=page_slab.devices,
+                        pinned=page_slab.pinned,
+                    )
                 )
             return unflattened
 
@@ -161,8 +163,11 @@ class PagedKVCache:
         flat_sharded_page_tables = []
         for pipeline in range(self.pipeline_count):
             # TODO: Do I need to make copies here, or are views enough?
+            # TODO: Handle 1 tensor per pipeline case. Currently that dim gets collapsed.
+            i_min = sum(self.pipeline_to_block_count[:pipeline])
+            i_max = i_min + self.pipeline_to_block_count[pipeline]
             sharded_page_table = ops.reshard_split(
-                page_table[:, self.pipeline_to_block_count[pipeline], ...],
+                page_table[:, i_min:i_max, ...],
                 dim=4,
                 count=self.shard_count,
             )
