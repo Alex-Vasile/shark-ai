@@ -32,24 +32,25 @@ def pipeline_parallelize_theta(theta: Theta, pipeline_parallelism_size: int):
             DeviceTensorTrait(devices[i]).set(shard._data)
         return tensor.clone(devices=devices)
 
-    # TODO: SHould token_embd, output_norm and output tensors be considered when splitting the workload across GPUs?
+    shard_count = theta.tensor("token_embd")["weight"].shard_count
+    num_blocks = len(theta.tensor("blk"))
 
-    shard_count = theta.tensor('token_embd')['weight'].shard_count
-    num_blocks = len(theta.tensor('blk'))
-    
     # Nothing to do for token_embd, already pinned and on correct devices.
 
-    for blk_idx in theta.tensor('blk').keys():
+    for blk_idx in theta.tensor("blk").keys():
         pp_group = int(int(blk_idx) * pipeline_parallelism_size / num_blocks)
         zero_4_group = shard_count * pp_group
         devices = tuple(i + zero_4_group for i in range(shard_count))
 
-        block_data = theta.tensor('blk', blk_idx)
+        block_data = theta.tensor("blk", blk_idx)
         for t_name in block_data.keys():
-            block_data[t_name]['weight'] = f(block_data[t_name]['weight'], devices)
+            block_data[t_name]["weight"] = f(block_data[t_name]["weight"], devices)
 
-    theta.tensor('output_norm')['weight'] = f(theta.tensor('output_norm')['weight'], devices)
-    theta.tensor('output')['weight'] = f(theta.tensor('output')['weight'], devices)
+    theta.tensor("output_norm")["weight"] = f(
+        theta.tensor("output_norm")["weight"], devices
+    )
+    theta.tensor("output")["weight"] = f(theta.tensor("output")["weight"], devices)
+
 
 def main():
     from ..utils import cli
