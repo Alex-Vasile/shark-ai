@@ -81,9 +81,10 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         sharded_cache_state: List[SplitPrimitiveTensor],
     ):
         # TODO
-        sharded_state_as_unsharded = ops.unshard(
-            self.sharded_cache.unflatten_page_tables(sharded_cache_state)
-        ).flatten(start_dim=1)
+        sharded_states_as_unsharded = [
+            ops.unshard(unflatted_page).flatten(start_dim=1)
+            for unflatted_page in self.sharded_cache.unflatten_page_tables(sharded_cache_state)
+        ]
         assert ops.equal(
             cache_state[0],
             sharded_state_as_unsharded,
