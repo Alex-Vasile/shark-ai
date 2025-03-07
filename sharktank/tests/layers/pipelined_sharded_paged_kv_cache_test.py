@@ -82,16 +82,21 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         cache_state: List[torch.Tensor],
         pipelined_sharded_cache_state: List[SplitPrimitiveTensor],
     ):
-        # TODO
-        sharded_states_as_unsharded = [
+        pipelined_sharded_states_as_unsharded = [
             ops.unshard(unflatted_page).flatten(start_dim=1)
             for unflatted_page in self.pipelined_sharded_cache.unflatten_page_tables(
                 pipelined_sharded_cache_state
             )
         ]
+        pipelined_sharded_states_as_single = torch.cat(
+            pipelined_sharded_states_as_unsharded, dim=1
+        )
+        assert iterables_equal(
+            cache_state[0].shape, pipelined_sharded_states_as_single.shape
+        )
         assert ops.equal(
             cache_state[0],
-            sharded_state_as_unsharded,
+            pipelined_sharded_states_as_single,
         )
 
     def testAllocate(self):
