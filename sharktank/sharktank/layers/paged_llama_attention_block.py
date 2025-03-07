@@ -234,7 +234,7 @@ class PagedLlamaAttentionBlock(ThetaLayer):
 
         # TODO: Move to front
         if isinstance(h, ShardedTensor) and any(h_d != attn_d for h_d, attn_d in zip(h.devices, attn_output.devices)):
-            h = ops.clone_tensor_w_shards_moved(h, attn_output.devices)
+            h = h.clone(devices= attn_output.devices)
         h = h + attn_output
         return h
 
