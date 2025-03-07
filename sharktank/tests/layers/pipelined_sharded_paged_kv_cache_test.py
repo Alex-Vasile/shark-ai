@@ -52,7 +52,7 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
             cache_partition_count=self.cache_partition_count,
             dtype=self.dtype,
         )
-        self.sharded_cache = PagedKVCache(
+        self.pipelined_sharded_cache = PagedKVCache(
             shard_count=self.shard_count,
             pipeline_to_device_lookup=self.pipeline_to_device_lookup,
             block_to_pipeline_lookup=self.block_to_pipeline_lookup,
@@ -69,7 +69,9 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
     ) -> Tuple[List[torch.Tensor], List[SplitPrimitiveTensor]]:
         cache_state = self.cache.allocate(self.page_count)
         cache_state[0] = torch.rand_like(cache_state[0])
-        sharded_cache_state = self.sharded_cache.shard_state(deepcopy(cache_state))
+        sharded_cache_state = self.pipelined_sharded_cache.shard_state(
+            deepcopy(cache_state)
+        )
         self.assert_equal_unsharded_and_sharded_cache_states(
             cache_state, sharded_cache_state
         )
@@ -78,12 +80,14 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
     def assert_equal_unsharded_and_sharded_cache_states(
         self,
         cache_state: List[torch.Tensor],
-        sharded_cache_state: List[SplitPrimitiveTensor],
+        pipelined_sharded_cache_state: List[SplitPrimitiveTensor],
     ):
         # TODO
         sharded_states_as_unsharded = [
             ops.unshard(unflatted_page).flatten(start_dim=1)
-            for unflatted_page in self.sharded_cache.unflatten_page_tables(sharded_cache_state)
+            for unflatted_page in self.pipelined_sharded_cache.unflatten_page_tables(
+                pipelined_sharded_cache_state
+            )
         ]
         assert ops.equal(
             cache_state[0],
@@ -92,38 +96,58 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
 
     def testAllocate(self):
         cache_state = self.cache.allocate(self.page_count)
-        sharded_cache_state = self.sharded_cache.allocate(self.page_count)
+        pipelined_sharded_cache_allocation = self.pipelined_sharded_cache.allocate(
+            self.page_count
+        )
         assert len(cache_state) == 1
-        assert len(sharded_cache_state) == self.pipeline_count
-        assert all(t.pinned for t in sharded_cache_state)
+        assert len(pipelined_sharded_cache_allocation) == self.pipeline_count
+        assert all(t.pinned for t in pipelined_sharded_cache_allocation)
         assert all(t.shape[0] == self.page_count for t in cache_state)
-        assert cache_state[0].shape[1] == sum(t.shape[1] for t in sharded_cache_state)
-        assert all(t.shard_dim == 1 for t in sharded_cache_state)
-        assert all(t.shard_count == self.shard_count for t in sharded_cache_state)
+        assert cache_state[0].shape[1] == sum(
+            t.shape[1] for t in pipelined_sharded_cache_allocation
+        )
+        assert all(t.shard_dim == 1 for t in pipelined_sharded_cache_allocation)
+        assert all(
+            t.shard_count == self.shard_count
+            for t in pipelined_sharded_cache_allocation
+        )
 
     def testUnflattenPageTable(self):
         cache_state = self.cache.allocate(self.page_count)
-        sharded_cache_state = self.sharded_cache.allocate(self.page_count)
-
-        unflattened_cache_state = self.cache.unflatten_page_tables(cache_state)
-        sharded_unflattened_cache_state = self.sharded_cache.unflatten_page_tables(
-            sharded_cache_state
+        assert len(cache_state) == 1
+        pipelined_sharded_cache_state = self.pipelined_sharded_cache.allocate(
+            self.page_count
         )
+
+        unflattened_state = self.cache.unflatten_page_tables(cache_state)
+        pipelined_sharded_unflattened_state = (
+            self.pipelined_sharded_cache.unflatten_page_tables(
+                pipelined_sharded_cache_state
+            )
+        )
+        # [0] is page count
         assert all(
-            iterables_equal(sharded_page_slab.shape, unflattened_cache_state[0].shape)
-            for sharded_page_slab in sharded_unflattened_cache_state
+            sharded_page_slab.shape[0] == self.page_count
+            for sharded_page_slab in pipelined_sharded_unflattened_state
+        )
+        # [1] is for block count, and split across pipelines
+        assert unflattened_state[0].shape[1] == self.transformer_block_count
+        assert (
+            sum(page_slab.shape[1] for page_slab in pipelined_sharded_unflattened_state)
+            == self.transformer_block_count
+        )
+        # [2:] should be the same
+        assert all(
+            iterables_equal(page_slab.shape[2:], unflattened_state[0].shape[2:])
+            for page_slab in pipelined_sharded_unflattened_state
         )
         assert all(
             sharded_page_slab.shard_dim == 4
-            for sharded_page_slab in sharded_unflattened_cache_state
+            for sharded_page_slab in pipelined_sharded_unflattened_state
         )
         assert all(
             sharded_page_slab.shard_count == self.shard_count
-            for sharded_page_slab in sharded_unflattened_cache_state
-        )
-        assert all(
-            sharded_page_slab.shape[0] == self.page_count
-            for sharded_page_slab in sharded_unflattened_cache_state
+            for sharded_page_slab in pipelined_sharded_unflattened_state
         )
 
     def testRead(self):
@@ -143,7 +167,7 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
             seq_len=self.block_seq_len * self.block_seq_stride,
         )
         sharded_page_ids = ops.replicate(page_ids, count=self.shard_count)
-        sharded_read = self.sharded_cache.read(
+        sharded_read = self.pipelined_sharded_cache.read(
             state=sharded_cache_state,
             transformer_block_index=transformer_block_index,
             page_ids=sharded_page_ids,
@@ -189,7 +213,7 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         )
         sharded_seq_positions = ops.replicate(seq_positions, count=self.shard_count)
         sharded_page_ids = ops.replicate(page_ids, count=self.shard_count)
-        self.sharded_cache.write_timestep(
+        self.pipelined_sharded_cache.write_timestep(
             state=sharded_cache_state,
             cache_partitions=sharded_cache_partitions,
             transformer_block_index=transformer_block_index,
@@ -233,7 +257,7 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
             ]
         )
         sharded_page_ids = ops.replicate(page_ids, count=self.shard_count)
-        self.sharded_cache.write(
+        self.pipelined_sharded_cache.write(
             state=sharded_cache_state,
             cache_partitions=sharded_cache_partitions,
             transformer_block_index=transformer_block_index,
