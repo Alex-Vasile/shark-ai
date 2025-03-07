@@ -75,7 +75,7 @@ class PagedKVCache:
         if block_to_pipeline_lookup is None:
             block_to_pipeline_lookup = tuple(0 for _ in range(transformer_block_count))
         assert all(table >= 0 for table in block_to_pipeline_lookup)
-        self.block_to_table_lookup = block_to_pipeline_lookup
+        self.block_to_pipeline_lookup = block_to_pipeline_lookup
         self.pipeline_count = len(pipeline_to_device_lookup)
         # TODO: Ensure that block_to_table_lookup and pipeline_count are consistent
 
@@ -239,7 +239,7 @@ class PagedKVCache:
         efficient unless if the compiler can fuse the gather.
         """
         page_tables = self.unflatten_page_tables(state)  # 6D
-        page_table = page_tables[self.block_to_table_lookup[transformer_block_index]]
+        page_table = page_tables[self.block_to_pipeline_lookup[transformer_block_index]]
 
         bs, block_seq_len, *_ = page_ids.shape
         # Blocks dim 1,2 according to the configured block stride.
@@ -255,7 +255,9 @@ class PagedKVCache:
         # Gather both partitions and split post gather. This is more
         # computationally efficient without gather fusion:
         subblock_table = page_table.flatten(start_dim=0, end_dim=1)
-        page_stride = self.transformer_block_count
+        page_stride = self.pipeline_to_block_count[
+            self.block_to_pipeline_lookup[transformer_block_index]
+        ]
 
         transformer_block_index = torch.full(
             (bs, block_seq_len), transformer_block_index
@@ -288,7 +290,7 @@ class PagedKVCache:
         """
         device = self.device
         page_tables = self.unflatten_page_tables(state)  # 6D
-        page_table = page_tables[self.block_to_table_lookup[transformer_block_index]]
+        page_table = page_tables[self.block_to_pipeline_lookup[transformer_block_index]]
         page_table = page_table.flatten(0, 3)
         bs, *_ = seq_positions.shape
         assert len(cache_partitions) == self.cache_partition_count
@@ -323,8 +325,12 @@ class PagedKVCache:
 
             partitions = partitions.repeat(bs, 1)
 
+            transformer_block_count_in_pipeline = self.pipeline_to_block_count[
+                self.block_to_pipeline_lookup[transformer_block_index]
+            ]
+
             index = page_id
-            index = index * self.transformer_block_count + transformer_block
+            index = index * transformer_block_count_in_pipeline + transformer_block
             index = index * self.cache_partition_count + partitions
             index = index * self.block_seq_stride + page_offset
             values = ops.to(cache_partition, dtype=page_table.dtype)
@@ -352,7 +358,7 @@ class PagedKVCache:
         in-place scatter cannot be fused.
         """
         page_tables = self.unflatten_page_tables(state)  # 6D
-        page_table = page_tables[self.block_to_table_lookup[transformer_block_index]]
+        page_table = page_tables[self.block_to_pipeline_lookup[transformer_block_index]]
         bs, block_seq_len, *_ = page_ids.shape
 
         # Reshape the page cache into sub-blocks so that we can index at the
@@ -363,7 +369,10 @@ class PagedKVCache:
         #   [page, attn_layer, cache_partition]
         # Where the cache line can be 0 (k) or 1 (v).
         subblock_table = page_table.flatten(start_dim=0, end_dim=2)
-        page_stride = self.transformer_block_count * self.cache_partition_count
+        transformer_block_count_in_pipeline = self.pipeline_to_block_count[
+            self.block_to_pipeline_lookup[transformer_block_index]
+        ]
+        page_stride = transformer_block_count_in_pipeline * self.cache_partition_count
         transformer_block_stride = self.cache_partition_count
         base_subblock_ids = page_ids * page_stride + (
             transformer_block_index * transformer_block_stride
