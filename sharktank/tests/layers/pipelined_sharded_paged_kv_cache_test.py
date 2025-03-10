@@ -33,16 +33,12 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         self.block_seq_len = 2
         self.max_seq_len = self.block_seq_len * self.block_seq_stride
 
-        block_to_pipeline_lookup = []
-        pipeline_to_device_lookup = [None for _ in range(self.pipeline_count)]
+        block_to_device_lookup = []
         for block in range(self.transformer_block_count):
             pp_group = int(block * self.pipeline_count / self.transformer_block_count)
             zero_4_group = self.shard_count * pp_group
-            devices = tuple(i + zero_4_group for i in range(self.shard_count))
-            block_to_pipeline_lookup.append(pp_group)
-            pipeline_to_device_lookup[pp_group] = devices
-        self.block_to_pipeline_lookup = tuple(block_to_pipeline_lookup)
-        self.pipeline_to_device_lookup = tuple(pipeline_to_device_lookup)
+            block_to_device_lookup.append(tuple(i + zero_4_group for i in range(self.shard_count)))
+        self.block_to_device_lookup = tuple(block_to_device_lookup)
 
         self.cache = PagedKVCache(
             transformer_block_count=self.transformer_block_count,
@@ -54,8 +50,7 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         )
         self.pipelined_sharded_cache = PagedKVCache(
             shard_count=self.shard_count,
-            pipeline_to_device_lookup=self.pipeline_to_device_lookup,
-            block_to_pipeline_lookup=self.block_to_pipeline_lookup,
+            block_to_device_lookup=self.block_to_device_lookup,
             transformer_block_count=self.transformer_block_count,
             attn_head_count=self.attn_head_count,
             block_seq_stride=self.block_seq_stride,
