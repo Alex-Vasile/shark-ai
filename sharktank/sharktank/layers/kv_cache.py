@@ -60,8 +60,7 @@ class PagedKVCache:
         dtype: torch.dtype = torch.float32,
         device: Optional[torch.device] = None,
         shard_count: int = 1,
-        pipeline_to_device_lookup: Tuple[Tuple[int, ...], ...] = None,
-        block_to_pipeline_lookup: Tuple[int, ...] = None,
+        block_to_device_lookup: tuple[tuple[int, ...], ...] = None,
     ):
         self.transformer_block_count = transformer_block_count
         self.attn_head_count = attn_head_count
@@ -69,13 +68,24 @@ class PagedKVCache:
         self.cache_partition_count = cache_partition_count
         self.block_seq_stride = block_seq_stride
         self.shard_count = shard_count
-        if pipeline_to_device_lookup is None:
-            pipeline_to_device_lookup = (tuple(range(self.shard_count)),)
-        self.pipeline_to_device_lookup = pipeline_to_device_lookup
-        if block_to_pipeline_lookup is None:
-            block_to_pipeline_lookup = tuple(0 for _ in range(transformer_block_count))
-        assert all(table >= 0 for table in block_to_pipeline_lookup)
-        self.block_to_pipeline_lookup = block_to_pipeline_lookup
+
+        if block_to_device_lookup is None:
+            block_to_device_lookup = tuple(tuple(range(self.shard_count)) for _ in range(self.transformer_block_count))
+        assert len(block_to_device_lookup) == transformer_block_count      
+        block_to_pipeline_lookup = [0]
+        pipeline_to_device_lookup = [block_to_device_lookup[0]]
+        pipeline = 0
+        for block in range(1, transformer_block_count):
+            ds_prev, ds_curr = block_to_device_lookup[block - 1], block_to_device_lookup[block]
+            assert all(d for d in ds_prev) >= 0
+            assert all(d for d in ds_curr) >= 0
+            if not all(d_prev == d_curr for d_prev, d_curr in zip(ds_prev, ds_curr)):
+                pipeline += 1
+                pipeline_to_device_lookup.append(ds_curr)
+            block_to_pipeline_lookup.append(pipeline)
+
+        self.pipeline_to_device_lookup = tuple(pipeline_to_device_lookup)
+        self.block_to_pipeline_lookup = tuple(block_to_pipeline_lookup)
         self.pipeline_count = len(pipeline_to_device_lookup)
         # TODO: Ensure that block_to_table_lookup and pipeline_count are consistent
 
