@@ -25,7 +25,9 @@ from ..models.grok.grok import *
 from .. import ops
 
 # TODO: Modifies original theta than make a new one. Should that change?
-def pipeline_parallelize_theta(theta: Theta, pipeline_parallelism_size: int):
+def pipeline_parallelize_theta(
+    theta: Theta, pipeline_parallelism_size: int
+) -> tuple[tuple[int, ...], ...]:
     """Pipeline parallelize theta."""
     # TODO: Still modifies the shards, but the signature doesn't imply this
     def f(tensor: ShardedTensor, devices: Tuple[int, ...]) -> ShardedTensor:
@@ -40,10 +42,12 @@ def pipeline_parallelize_theta(theta: Theta, pipeline_parallelism_size: int):
 
     # Nothing to do for token_embd, already pinned and on correct devices.
 
+    block_to_device_lookup = []
     for blk_idx in theta.tensor("blk").keys():
         pp_group = int(int(blk_idx) * pipeline_parallelism_size / num_blocks)
         zero_4_group = shard_count * pp_group
         devices = tuple(i + zero_4_group for i in range(shard_count))
+        block_to_device_lookup.append(devices)
 
         block_data = theta.tensor("blk", blk_idx)
         for t_name in block_data.keys():
@@ -53,6 +57,8 @@ def pipeline_parallelize_theta(theta: Theta, pipeline_parallelism_size: int):
         theta.tensor("output_norm")["weight"], devices
     )
     theta.tensor("output")["weight"] = f(theta.tensor("output")["weight"], devices)
+
+    return tuple(block_to_device_lookup)
 
 
 def main():
@@ -124,12 +130,15 @@ def main():
         else args.tensor_parallelism_size
     )
 
-    pipeline_parallelize_theta(dataset.root_theta, args.pipeline_parallelism_size)
+    block_to_device_lookup = pipeline_parallelize_theta(
+        dataset.root_theta, args.pipeline_parallelism_size
+    )
 
     llama_config = LlamaModelConfig(
         hp,
         tensor_parallelism_size=tensor_parallelism_size,
         pipeline_parallelism_size=args.pipeline_parallelism_size,
+        block_to_device_lookup=block_to_device_lookup,
         use_hf=args.use_hf,
         static_tables=False,  # Rely on the compiler for hoisting tables.
         attention_kernel=args.attention_kernel,
@@ -190,7 +199,9 @@ def main():
             )
             page_dim = torch.export.Dim("page")
 
-            dynamic_shapes = [{0: page_dim}]
+            dynamic_shapes = [
+                {0: page_dim} for _ in range(llama_config.pipeline_parallelism_size)
+            ]
             unpacked = cache_state
             arg_affinities = {}
             shard_dim = None
