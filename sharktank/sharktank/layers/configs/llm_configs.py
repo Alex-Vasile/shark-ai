@@ -193,8 +193,12 @@ class LlamaModelConfig:
     tensor_parallelism_size: int = 1
 
     # How many groups of (roughly) uniform size to
-    # If greater than 1, the model will re-wrap
+    # If greater than 1, the model will re-wrap all non-sharded tensors as sharded over 1 device.
     pipeline_parallelism_size: int = 1
+
+    # Mapping between a transformer block and the device(s) it is on.
+    # None for no pipeline parallelism. If not none, must also account for sharding.
+    block_to_device_lookup: Optional[tuple[tuple[int, ...], ...]] = None
 
     # Which attention kernel to use.
     attention_kernel: str = "torch"
