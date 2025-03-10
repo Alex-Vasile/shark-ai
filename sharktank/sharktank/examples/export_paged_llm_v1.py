@@ -179,7 +179,7 @@ def main():
             )
             page_dim = torch.export.Dim("page")
 
-            dynamic_shapes = [{0: page_dim}]
+            dynamic_shapes = [{0: page_dim} for _ in range(llama_config.pipeline_parallelism_size)]
             unpacked = cache_state
             arg_affinities = {}
             shard_dim = None
