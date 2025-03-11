@@ -38,7 +38,9 @@ def pipeline_parallelize_theta(theta: Theta, pipeline_parallelism_size: int) -> 
     # Nothing to do for token_embd, already pinned and on correct devices.
 
     block_to_device_lookup = []
-    for blk_idx in theta.tensor("blk").keys():
+    block_indices = sorted(theta.tensor("blk").keys(), key=lambda item: int(item))
+    assert (bi == i for i, bi in enumerate(block_indices)), "Blocks assumed to be numbered contiguously from [0, N-1]"
+    for blk_idx in block_indices:
         pp_group = int(int(blk_idx) * pipeline_parallelism_size / num_blocks)
         zero_4_group = shard_count * pp_group
         devices = tuple(i + zero_4_group for i in range(shard_count))
