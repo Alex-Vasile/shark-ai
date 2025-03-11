@@ -123,6 +123,7 @@ class PagedKVCache:
             len(state) == self.pipeline_count
         ), f"Expected {self.pipeline_count}-element state. Got: {len(state)}"
         if self.shard_count == 1:
+            assert self.pipeline_count == 1
             assert all(
                 not isinstance(page_slab, SplitPrimitiveTensor) for page_slab in state
             )
@@ -325,8 +326,9 @@ class PagedKVCache:
                     for _ in range(seq_positions.shard_count)
                 ]
 
-                partitions = ReplicatedTensor(ts=partitions)
-                transformer_block = ReplicatedTensor(ts=transformer_block)
+                devices = self.pipeline_to_device_lookup[self.block_to_pipeline_lookup[transformer_block_index]]
+                partitions = ReplicatedTensor(ts=partitions, devices=devices)
+                transformer_block = ReplicatedTensor(ts=transformer_block, devices=devices)
             else:
                 partitions = torch.tensor(idx).unsqueeze(0)
                 transformer_block = torch.full(
