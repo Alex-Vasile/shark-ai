@@ -9,6 +9,8 @@ from typing import Optional
 
 import torch
 import torch.nn.functional as F
+
+from sharktank.types.tensors import ReplicatedTensor
 from ..types import QuantizerTensor, ShardedTensor, StaticScaledQuantizer
 from .base import Theta, ThetaLayer
 from .linear import LinearLayer
@@ -111,8 +113,8 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         # [bs, batch_seq_len // block_seq_stride]
         seq_block_ids: torch.Tensor,
         start_index: Optional[int] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        start_positions: Optional[torch.Tensor | ReplicatedTensor] = None,
+        attention_mask: Optional[torch.Tensor | ReplicatedTensor] = None,
         embedding_batch_mask: Optional[torch.Tensor] = None,
         cache_state: list[torch.Tensor] = None,
     ):
@@ -209,7 +211,7 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         xv_cache_update: torch.Tensor,
         cache_state: list[torch.Tensor],
         # [bs, batch_seq_len // block_seq_stride]
-        seq_block_ids: torch.Tensor,
+        seq_block_ids: Optional[torch.Tensor | ReplicatedTensor],
         kv_seq_len: int,
         start_positions: Optional[torch.Tensor] = None,
     ):
