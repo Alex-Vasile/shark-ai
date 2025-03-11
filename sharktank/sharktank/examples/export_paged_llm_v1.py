@@ -131,9 +131,9 @@ def main():
 
     if llama_config.hp.expert_count:
         if llama_config.hp.model_arch == "grok":
-            model = PagedGrokModelV1(dataset.root_theta, llama_config)
+            model = PagedGrokModelV1(dataset.root_theta, llama_config)  # TODO: Propagate list attention mask
         else:
-            model = PagedMixtralModelV1(dataset.root_theta, llama_config)
+            model = PagedMixtralModelV1(dataset.root_theta, llama_config)  # TODO: Propagate list attention mask
     else:
         model = PagedLlamaModelV1(dataset.root_theta, llama_config)
 
@@ -214,8 +214,13 @@ def main():
         else:
             raise NotImplementedError(f"Unsupported KV cache type: {type(model.cache)}")
 
-    def repack_cache(cache, shard_dim):
-        return [SplitPrimitiveTensor(ts=c, shard_dim=shard_dim) for c in cache]
+    def repack_cache(cache, shard_dim, pipeline_to_device_lookup: tuple[tuple[int, ...], ...]) -> list[SplitPrimitiveTensor]:
+        pass
+        return [
+            SplitPrimitiveTensor(ts=c, shard_dim=shard_dim, devices=pipeline_to_device_lookup[pipeline], pinned=True)
+            for pipeline, c
+            in enumerate(cache)
+        ]
 
     def generate_batch_prefill(bs: int):
         # torch.export.Dim would make min at least 2
@@ -276,11 +281,19 @@ def main():
             if llama_config.tensor_parallelism_size != 1:
                 shard_count = llama_config.tensor_parallelism_size
 
-                tokens = ops.replicate(tokens, count=shard_count)
-                if attention_mask is not None:
-                    attention_mask = ops.replicate(attention_mask, count=shard_count)
-                seq_block_ids = ops.replicate(seq_block_ids, count=shard_count)
-                cache_tensors = repack_cache(cs, cache_shard_dim)
+                tokens = ops.replicate(tokens, count=shard_count).clone(devices=llama_config.block_to_device_lookup[0])
+                if attention_mask is None:
+                    attention_mask = [None] * model.cache.pipeline_count
+                else:
+                    attention_mask = [
+                        ops.replicate(attention_mask, count=shard_count).clone(devices=model.cache.pipeline_to_device_lookup[pipeline])
+                        for pipeline in range(model.cache.pipeline_count)
+                    ]
+                seq_block_ids = [
+                        ops.replicate(seq_block_ids, count=shard_count).clone(devices=model.cache.pipeline_to_device_lookup[pipeline])
+                        for pipeline in range(model.cache.pipeline_count)
+                ]
+                cache_tensors = repack_cache(cs, cache_shard_dim, model.cache.pipeline_to_device_lookup)
 
             logits = model.prefill(
                 tokens,
@@ -362,12 +375,17 @@ def main():
             if llama_config.tensor_parallelism_size != 1:
                 shard_count = llama_config.tensor_parallelism_size
 
-                tokens = ops.replicate(tokens, count=shard_count)
-                attention_mask = ops.replicate(attention_mask, count=shard_count)
-                start_positions = ops.replicate(start_positions, count=shard_count)
-                seq_block_ids = ops.replicate(seq_block_ids, count=shard_count)
+                tokens = ops.replicate(tokens, count=shard_count).clone(devices=llama_config.block_to_device_lookup[0])
 
-                cache_state = repack_cache(cache_state, cache_shard_dim)
+                _attention_mask, _start_positions, _seq_block_ids = [], [], []
+                for pipeline in range(model.cache.pipeline_count):
+                    devices = model.cache.pipeline_to_device_lookup[pipeline]
+                    _attention_mask.append(ops.replicate(attention_mask, count=shard_count).clone(devices=devices))
+                    _start_positions.append(ops.replicate(start_positions, count=shard_count).clone(devices=devices))
+                    _seq_block_ids.append(ops.replicate(seq_block_ids, count=shard_count).clone(devices=devices))
+                attention_mask, start_positions, seq_block_ids = _attention_mask, _start_positions, _seq_block_ids
+
+                cache_state = repack_cache(cache_state, cache_shard_dim, model.cache.pipeline_to_device_lookup)
 
             logits = model.decode(
                 tokens,
