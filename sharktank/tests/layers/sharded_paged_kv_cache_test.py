@@ -67,7 +67,7 @@ class ShardedPagedKVCacheTest(unittest.TestCase):
         sharded_cache_state: List[SplitPrimitiveTensor],
     ):
         sharded_state_as_unsharded = ops.unshard(
-            self.sharded_cache.unflatten_page_tables(sharded_cache_state)
+            self.sharded_cache.unflatten_page_tables(sharded_cache_state)[0]
         ).flatten(start_dim=1)
         assert ops.equal(
             cache_state[0],
@@ -87,10 +87,10 @@ class ShardedPagedKVCacheTest(unittest.TestCase):
         cache_state = self.cache.allocate(self.page_count)
         sharded_cache_state = self.sharded_cache.allocate(self.page_count)
 
-        unflattened_cache_state = self.cache.unflatten_page_tables(cache_state)
+        unflattened_cache_state = self.cache.unflatten_page_tables(cache_state)[0]
         sharded_unflattened_cache_state = self.sharded_cache.unflatten_page_tables(
             sharded_cache_state
-        )
+        )[0]
         assert iterables_equal(
             unflattened_cache_state.shape, sharded_unflattened_cache_state.shape
         )
