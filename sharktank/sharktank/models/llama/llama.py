@@ -148,9 +148,13 @@ class PagedLlamaModelV1(BaseCausalLMModel):
                 h,
                 embedding=self.attention_embedding,
                 start_index=0,
-                attention_mask=attention_mask[self.cache.block_to_pipeline_lookup[block_idx]],
+                attention_mask=attention_mask[
+                    self.cache.block_to_pipeline_lookup[block_idx]
+                ],
                 cache_state=cache_state,
-                seq_block_ids=seq_block_ids[self.cache.block_to_pipeline_lookup[block_idx]],
+                seq_block_ids=seq_block_ids[
+                    self.cache.block_to_pipeline_lookup[block_idx]
+                ],
             )
             self.trace_tensor(f"llama.attn_block.{block_idx}.output", h)
 
@@ -170,20 +174,27 @@ class PagedLlamaModelV1(BaseCausalLMModel):
         # [bs, batch_seq_len // block_seq_stride]
         seq_block_ids: list[Union[torch.Tensor, ReplicatedTensor]],
         cache_state: list[Union[torch.Tensor, SplitPrimitiveTensor]],
-    ):        
+    ):
         assert len(tokens.shape) == 2
         assert all(len(mask.shape) == 4 for mask in attention_mask)
         assert all(len(start_position.shape) == 1 for start_position in start_positions)
         assert all(len(seq_block_id.shape) == 2 for seq_block_id in seq_block_ids)
         assert all(mask.shape[0] == tokens.shape[0] for mask in attention_mask)
-        assert all(start_position.shape[0] == tokens.shape[0] for start_position in start_positions)
-        assert all(seq_block_id.shape[0] == tokens.shape[0] for seq_block_id in seq_block_ids)
+        assert all(
+            start_position.shape[0] == tokens.shape[0]
+            for start_position in start_positions
+        )
+        assert all(
+            seq_block_id.shape[0] == tokens.shape[0] for seq_block_id in seq_block_ids
+        )
         assert tokens.shape[1] == 1
         assert all(mask.shape[1] == 1 and mask.shape[2] == 1 for mask in attention_mask)
-        assert all (seq_block_ids[0].shape[1] == seq_block_id.shape[1] for seq_block_id in seq_block_ids[1:])
         assert all(
-            mask.shape[3]
-            == seq_block_ids[0].shape[1] * self.config.block_seq_stride
+            seq_block_ids[0].shape[1] == seq_block_id.shape[1]
+            for seq_block_id in seq_block_ids[1:]
+        )
+        assert all(
+            mask.shape[3] == seq_block_ids[0].shape[1] * self.config.block_seq_stride
             for mask in attention_mask
         )
         self._assert_device(tokens)
@@ -213,12 +224,20 @@ class PagedLlamaModelV1(BaseCausalLMModel):
                 self.trace_tensor(f"llama.attn_block.{block_idx}.input", h)
             h = block(  # TODO: Should we index into attention_mask and cache here?
                 h,  # TODO: Hacky, shouldn't need to read info out of self.cache
-                start_positions=start_positions[self.cache.block_to_pipeline_lookup[block_idx]],
+                start_positions=start_positions[
+                    self.cache.block_to_pipeline_lookup[block_idx]
+                ],
                 embedding=self.attention_embedding,
-                embedding_batch_mask=embedding_batch_masks[self.cache.block_to_pipeline_lookup[block_idx]],
-                attention_mask=attention_mask[self.cache.block_to_pipeline_lookup[block_idx]],
+                embedding_batch_mask=embedding_batch_masks[
+                    self.cache.block_to_pipeline_lookup[block_idx]
+                ],
+                attention_mask=attention_mask[
+                    self.cache.block_to_pipeline_lookup[block_idx]
+                ],
                 cache_state=cache_state,
-                seq_block_ids=seq_block_ids[self.cache.block_to_pipeline_lookup[block_idx]],
+                seq_block_ids=seq_block_ids[
+                    self.cache.block_to_pipeline_lookup[block_idx]
+                ],
             )
             self.trace_tensor(f"llama.attn_block.{block_idx}.output", h)
 
@@ -283,7 +302,7 @@ class AttentionFFNBlock(ThetaLayer):
         *,
         embedding: RotaryEmbeddingLayer,
         # [bs, batch_seq_len // block_seq_stride]
-        seq_block_ids: torch.Tensor | ReplicatedTensor ,
+        seq_block_ids: torch.Tensor | ReplicatedTensor,
         start_index: Optional[int] = None,
         start_positions: Optional[torch.Tensor] = None,
         attention_mask: list[Union[torch.Tensor, ReplicatedTensor]] = None,
