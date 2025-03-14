@@ -57,10 +57,10 @@ iree_compile_flags = [
     "--iree-llvmgpu-enable-prefetch=true",
     "--iree-opt-data-tiling=false",
     "--iree-codegen-gpu-native-math-precision=true",
-    "--iree-codegen-llvmgpu-use-vector-distribution=1",
+    "--iree-codegen-llvmgpu-use-vector-distribution",
     "--iree-hip-waves-per-eu=2",
     "--iree-execution-model=async-external",
-    "--iree-preprocessing-pass-pipeline=builtin.module(iree-preprocessing-transpose-convolution-pipeline,iree-preprocessing-pad-to-intrinsics,util.func(iree-preprocessing-generalize-linalg-matmul-experimental))",
+    "--iree-preprocessing-pass-pipeline=builtin.module(iree-preprocessing-transpose-convolution-pipeline,iree-preprocessing-pad-to-intrinsics)",
 ]
 
 
@@ -274,12 +274,6 @@ class FluxTest(TempDirTestBase):
             reference_dtype=torch.float32, target_dtype=torch.float32, atol=1e-2
         )
 
-    @skip(
-        reason=(
-            "Sporadic segmentation fault during buffer destruction."
-            " See https://github.com/nod-ai/shark-ai/issues/1050"
-        )
-    )
     @with_flux_data
     def testCompareDevIreeBf16AgainstEagerF32(self):
         self.runTestCompareDevIreeAgainstEager(

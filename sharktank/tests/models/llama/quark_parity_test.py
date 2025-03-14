@@ -21,9 +21,6 @@ class QuarkParityTest(TempDirTestBase):
         super().setUp()
         self.path_prefix = Path("/shark-cache/quark_test")
 
-    @pytest.mark.xfail(
-        reason="Known accuracy validation issues with quark parity. See https://github.com/nod-ai/shark-ai/issues/1051"
-    )
     @with_quark_data
     def test_compare_against_quark(self):
         sharktank_dir = str(
