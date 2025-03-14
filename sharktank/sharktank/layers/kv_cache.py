@@ -70,13 +70,19 @@ class PagedKVCache:
         self.shard_count = shard_count
 
         if block_to_device_lookup is None:
-            block_to_device_lookup = tuple(tuple(range(self.shard_count)) for _ in range(self.transformer_block_count))
-        assert len(block_to_device_lookup) == transformer_block_count      
+            block_to_device_lookup = tuple(
+                tuple(range(self.shard_count))
+                for _ in range(self.transformer_block_count)
+            )
+        assert len(block_to_device_lookup) == transformer_block_count
         block_to_pipeline_lookup = [0]
         pipeline_to_device_lookup = [block_to_device_lookup[0]]
         pipeline = 0
         for block in range(1, transformer_block_count):
-            ds_prev, ds_curr = block_to_device_lookup[block - 1], block_to_device_lookup[block]
+            ds_prev, ds_curr = (
+                block_to_device_lookup[block - 1],
+                block_to_device_lookup[block],
+            )
             assert all(d for d in ds_prev) >= 0
             assert all(d for d in ds_curr) >= 0
             if not all(d_prev == d_curr for d_prev, d_curr in zip(ds_prev, ds_curr)):
@@ -326,9 +332,13 @@ class PagedKVCache:
                     for _ in range(seq_positions.shard_count)
                 ]
 
-                devices = self.pipeline_to_device_lookup[self.block_to_pipeline_lookup[transformer_block_index]]
+                devices = self.pipeline_to_device_lookup[
+                    self.block_to_pipeline_lookup[transformer_block_index]
+                ]
                 partitions = ReplicatedTensor(ts=partitions, devices=devices)
-                transformer_block = ReplicatedTensor(ts=transformer_block, devices=devices)
+                transformer_block = ReplicatedTensor(
+                    ts=transformer_block, devices=devices
+                )
             else:
                 partitions = torch.tensor(idx).unsqueeze(0)
                 transformer_block = torch.full(
