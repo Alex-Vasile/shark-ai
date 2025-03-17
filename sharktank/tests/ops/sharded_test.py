@@ -829,7 +829,7 @@ class MatmulTest(unittest.TestCase):
         b = torch.rand(3, 6, dtype=torch.float32)
         shard_count = 3
         unsharded_result = torch.matmul(a, b)
-        
+
         a_sharded = ops.replicate(a, count=shard_count)
         b_sharded = ops.replicate(b, count=shard_count)
         actual_result = ops.matmul(a_sharded, b_sharded)
