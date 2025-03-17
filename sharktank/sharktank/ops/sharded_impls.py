@@ -851,6 +851,17 @@ for types in itertools.product([Tensor, ShardedTensor], repeat=2):
 
 # Sharded matmuls.
 
+@matmul.override(ReplicatedTensor, ReplicatedTensor)
+def matmul_replicated_lhs_replicated_rhs(
+    lhs: ReplicatedTensor, rhs: SplitPrimitiveTensor, *, transpose_rhs: bool
+) -> SplitPrimitiveTensor | UnreducedTensor:
+    assert lhs.shard_count == rhs.shard_count
+
+    if transpose_rhs:
+        return matmul(lhs, rhs.T)
+    
+    shard = matmul(lhs.shards[0], rhs.shards[0])
+    return ReplicatedTensor(ts=shard, shard_count=lhs.shard_count)
 
 @matmul.override(ReplicatedTensor, SplitPrimitiveTensor)
 def matmul_replicated_lhs_split_rhs(

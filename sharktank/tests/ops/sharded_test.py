@@ -824,6 +824,18 @@ class MatmulTest(unittest.TestCase):
         actual_result = unbox_tensor(ops.unshard(sharded_result))
         torch.testing.assert_close(actual_result, expected_result)
 
+    def testReplicatedLhsAndRhs(self):
+        a = torch.rand(2, 5, 3, dtype=torch.float32)
+        b = torch.rand(3, 6, dtype=torch.float32)
+        shard_count = 3
+        unsharded_result = torch.matmul(a, b)
+        
+        a_sharded = ops.replicate(a, count=shard_count)
+        b_sharded = ops.replicate(b, count=shard_count)
+        actual_result = ops.matmul(a_sharded, b_sharded)
+        for shard in actual_result.shards:
+            assert ops.equal(shard, unsharded_result)
+
 
 class ReplicateTest(unittest.TestCase):
     def testReplicateReplicated(self):
