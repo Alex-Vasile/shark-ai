@@ -9,6 +9,8 @@ from typing import Optional, Union
 
 import torch
 
+from sharktank.types.tensors import ShardedTensor
+
 from .base import BaseLayer
 from .. import ops
 from .. import kernels
@@ -28,6 +30,7 @@ class RotaryEmbeddingLayer(BaseLayer):
         use_hf: bool = False,
         use_table: bool = True,
         tensor_parallelism_size: int = 1,
+        pipeline_parallelism: bool = False,
         dtype: torch.dtype = torch.float32,
         devices: tuple[int, ...],
     ):
@@ -40,6 +43,7 @@ class RotaryEmbeddingLayer(BaseLayer):
         self.dtype = dtype
         self.rope_freq_base = rope_freq_base if rope_freq_base is not None else 10000.0
         self.tensor_parallelism_size = tensor_parallelism_size
+        self.pipeline_parallelism = pipeline_parallelism
         self.devices = devices
 
     @property
@@ -49,11 +53,11 @@ class RotaryEmbeddingLayer(BaseLayer):
     def forward(
         self,
         *,
-        xt: Union[torch.Tensor, SplitPrimitiveTensor],
+        xt: Union[torch.Tensor, ShardedTensor],
         start_index: int,
     ):
         table = self.rotary_embed_table
-        if not isinstance(xt, SplitPrimitiveTensor):
+        if not isinstance(xt, ShardedTensor):
             return self.forward_unsharded(
                 xt=xt,
                 start_index=start_index,
@@ -61,7 +65,7 @@ class RotaryEmbeddingLayer(BaseLayer):
             )
 
         assert (
-            isinstance(table, ReplicatedTensor) and xt.shard_count == table.shard_count
+            isinstance(table, ShardedTensor) and xt.shard_count == table.shard_count
         )
         rotary_shards = [unbox_tensor(shard) for shard in table.shards]
 
@@ -73,10 +77,7 @@ class RotaryEmbeddingLayer(BaseLayer):
             )
             for xt_shard, rotary_shard in zip(xt.shards, rotary_shards)
         ]
-        xt = SplitPrimitiveTensor(
-            ts=xt_shards, shard_dim=xt.shard_dim, devices=xt.devices
-        )
-        return xt
+        return xt.clone(ts=xt_shards)
 
     def _create_interleaved_tensor(_, dim):
         """Creates a tensor which indexes an tensor such that
@@ -299,7 +300,7 @@ class RotaryEmbeddingLayer(BaseLayer):
         return self._replicate(freqs_cis)
 
     def _replicate(self, t):
-        if self.tensor_parallelism_size > 1:
+        if self.tensor_parallelism_size > 1 or self.pipeline_parallelism:
             # Replicate across all devices, the data is not a lot and the computation is cheap.
             t = ops.replicate(t, self.tensor_parallelism_size).clone(
                 devices=self.devices
