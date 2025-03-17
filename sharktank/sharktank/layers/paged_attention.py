@@ -226,10 +226,10 @@ class PagedAttention:
             for pipeline in range(self.pipeline_count)
         ]
 
-        if self.shard_count == 1:
-            assert self.pipeline_count == 1
+        if self.shard_count == 1 and self.pipeline_count == 1:
             return shards[0]
 
+        # TODO: Should I return a replicated tensor (special calse for TP=1 and PP>1) or just use the splittensor behaviour below?
         return [
             SplitPrimitiveTensor(ts=shards[i], shard_dim=1, devices=devices)
             for i, devices in enumerate(self.pipeline_to_device_lookup)
