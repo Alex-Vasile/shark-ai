@@ -30,11 +30,17 @@ def pipeline_parallelize_theta(
     """Pipeline parallelize theta."""
     # TODO: Still modifies the shards, but the signature doesn't imply this
     def f(tensor: ShardedTensor, devices: Tuple[int, ...]) -> ShardedTensor:
+        if isinstance(tensor, DefaultPrimitiveTensor):
+            tensor = ReplicatedTensor(ts=tensor._data, shard_count=1)
         for i, shard in enumerate(tensor.shards):
             DeviceTensorTrait(devices[i]).set(shard._data)
         return tensor.clone(devices=devices)
 
-    shard_count = theta.tensor("token_embd")["weight"].shard_count
+    _t = theta.tensor("token_embd")["weight"]
+    if isinstance(_t, DefaultPrimitiveTensor):
+        shard_count = 1
+    else:
+        shard_count = _t.shard_count
     num_blocks = len(theta.tensor("blk"))
 
     # Nothing to do for token_embd, already pinned and on correct devices.
@@ -118,9 +124,15 @@ def main():
         else args.tensor_parallelism_size
     )
 
-    block_to_device_lookup = pipeline_parallelize_theta(
-        dataset.root_theta, args.pipeline_parallelism_size
-    )
+    if args.pipeline_parallelism_size > 1:
+        block_to_device_lookup = pipeline_parallelize_theta(
+            dataset.root_theta, args.pipeline_parallelism_size
+        )
+    else:
+        block_to_device_lookup = tuple(
+            tuple(range(args.tensor_parallelism_size))
+            for _ in range(len(dataset.root_theta.tensor("blk")))
+        )
 
     llama_config = LlamaModelConfig(
         hp,
@@ -322,6 +334,9 @@ def main():
                 cache_tensors = repack_cache(
                     cs, cache_shard_dim, model.cache.pipeline_to_device_lookup
                 )
+            else:
+                attention_mask = [attention_mask]
+                seq_block_ids = [seq_block_ids]
 
             logits = model.prefill(
                 tokens,
