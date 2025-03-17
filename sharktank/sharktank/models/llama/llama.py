@@ -90,6 +90,7 @@ class PagedLlamaModelV1(BaseCausalLMModel):
                     device=self.device,
                     use_hf=self.use_hf,
                     tensor_parallelism_size=config.tensor_parallelism_size,
+                    pipeline_parallelism=config.pipeline_parallelism_size > 1,
                     devices=self.cache.pipeline_to_device_lookup[pipeline],
                     dtype=config.activation_dtype,
                 )
