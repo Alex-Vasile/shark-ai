@@ -81,18 +81,22 @@ class PagedLlamaModelV1(BaseCausalLMModel):
             "token_embedding",
             TokenEmbeddingLayer(theta("token_embd"), dtype=self.activation_dtype),
         )
-        self.add_module(
-            "attention_embedding",
-            RotaryEmbeddingLayer(
-                rope_dimension_count=hp.rope_dimension_count,
-                rope_freq_base=hp.rope_freq_base,
-                max_seqlen=hp.context_length,
-                device=self.device,
-                use_hf=self.use_hf,
-                tensor_parallelism_size=config.tensor_parallelism_size,
-                dtype=config.activation_dtype,
-            ),
+        self.attention_embedding = nn.ModuleList(
+            [
+                RotaryEmbeddingLayer(
+                    rope_dimension_count=hp.rope_dimension_count,
+                    rope_freq_base=hp.rope_freq_base,
+                    max_seqlen=hp.context_length,
+                    device=self.device,
+                    use_hf=self.use_hf,
+                    tensor_parallelism_size=config.tensor_parallelism_size,
+                    devices=self.cache.pipeline_to_device_lookup[pipeline],
+                    dtype=config.activation_dtype,
+                )
+                for pipeline in range(self.config.pipeline_parallelism_size)
+            ]
         )
+
         self.add_module(
             "output_norm",
             RMSNormLayer(
@@ -144,7 +148,9 @@ class PagedLlamaModelV1(BaseCausalLMModel):
                 self.trace_tensor(f"llama.attn_block.{block_idx}.input", h)
             h = block(
                 h,
-                embedding=self.attention_embedding,
+                embedding=self.attention_embedding[
+                    self.cache.block_to_pipeline_lookup[block_idx]
+                ],
                 start_index=0,
                 attention_mask=attention_mask[
                     self.cache.block_to_pipeline_lookup[block_idx]
@@ -206,9 +212,9 @@ class PagedLlamaModelV1(BaseCausalLMModel):
         # as it is the same for all blocks.
         embedding_batch_masks = []
         for start_position in start_positions:
-            mask = self.attention_embedding.compute_batch_mask(
-                start_position, batch_seq_len=1
-            )
+            mask = self.attention_embedding[
+                0  # TODO: This is not right. How to handle this?
+            ].compute_batch_mask(start_position, batch_seq_len=1)
             embedding_batch_masks.append(mask)
             # TODO: How to name and trace this properly
             self.trace_tensor("llama.embedding_batch_mask", mask)
@@ -225,7 +231,9 @@ class PagedLlamaModelV1(BaseCausalLMModel):
                 start_positions=start_positions[
                     self.cache.block_to_pipeline_lookup[block_idx]
                 ],
-                embedding=self.attention_embedding,
+                embedding=self.attention_embedding[
+                    self.cache.block_to_pipeline_lookup[block_idx]
+                ],
                 embedding_batch_mask=embedding_batch_masks[
                     self.cache.block_to_pipeline_lookup[block_idx]
                 ],
