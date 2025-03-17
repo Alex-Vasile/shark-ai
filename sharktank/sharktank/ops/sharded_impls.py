@@ -1486,6 +1486,19 @@ def unsqueeze_replicated(tensor: ReplicatedTensor, dim: int) -> SplitPrimitiveTe
     return ReplicatedTensor(ts=shards)
 
 
+@view.override(ReplicatedTensor)
+def view_replicated(tensor: ReplicatedTensor, shape: List[int]) -> ReplicatedTensor:
+    view_split_range = _reshape_get_single_split_dim(tensor.shape, shape)
+    if view_split_range is None:
+        raise ValueError(
+            "Only taking a tensor view where splitting a single dimension is supported"
+        )
+    shards = [view(shard, shape) for shard in tensor.shards]
+    res = ReplicatedTensor(ts=shards)
+    assert math.prod(res.shape) == math.prod(tensor.shape)
+    return res
+
+
 @view.override(SplitPrimitiveTensor)
 def view_split(tensor: SplitPrimitiveTensor, shape: List[int]) -> SplitPrimitiveTensor:
     view_split_range = _reshape_get_single_split_dim(tensor.shape, shape)
