@@ -230,8 +230,16 @@ def main():
                     [ds] * llama_config.tensor_parallelism_size for ds in dynamic_shapes
                 ]
 
-                for i in range(llama_config.tensor_parallelism_size):
-                    arg_affinities[i] = DeviceAffinity(str(i))
+                # TODO: What order do these come in at?
+                for pipeline in range(llama_config.pipeline_parallelism_size):
+                    for tp in range(llama_config.tensor_parallelism_size):
+                        i = pipeline * llama_config.tensor_parallelism_size + tp
+                        first_device_of_pipeline = (
+                            model.cache.pipeline_to_device_lookup[pipeline][0]
+                        )
+                        arg_affinities[i] = DeviceAffinity(
+                            str(first_device_of_pipeline)
+                        )
 
             return unpacked, shard_dim, dynamic_shapes, arg_affinities
 
@@ -284,7 +292,7 @@ def main():
             arg_affinities = {key + 3: arg_affinities[key] for key in arg_affinities}
 
             for i in range(3):
-                arg_affinities[i] = DeviceAffinity("0")
+                arg_affinities[i] = DeviceAffinity(str(block_to_device_lookup[0][0]))
 
         dynamic_shapes = {
             "tokens": {1: sl_dim},
@@ -384,7 +392,7 @@ def main():
 
             # Inputs have default affinity 0
             for i in range(4):
-                arg_affinities[i] = DeviceAffinity("0")
+                arg_affinities[i] = DeviceAffinity(str(block_to_device_lookup[0][0]))
 
         dynamic_shapes = {
             "tokens": {},
