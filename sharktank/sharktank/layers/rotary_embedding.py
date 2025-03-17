@@ -29,6 +29,7 @@ class RotaryEmbeddingLayer(BaseLayer):
         use_table: bool = True,
         tensor_parallelism_size: int = 1,
         dtype: torch.dtype = torch.float32,
+        devices: tuple[int, ...],
     ):
         super().__init__()
         self.device = device
@@ -39,6 +40,7 @@ class RotaryEmbeddingLayer(BaseLayer):
         self.dtype = dtype
         self.rope_freq_base = rope_freq_base if rope_freq_base is not None else 10000.0
         self.tensor_parallelism_size = tensor_parallelism_size
+        self.devices = devices
 
     @property
     def rotary_embed_table(self):
@@ -312,6 +314,8 @@ class RotaryEmbeddingLayer(BaseLayer):
     def _replicate(self, t):
         if self.tensor_parallelism_size > 1:
             # Replicate across all devices, the data is not a lot and the computation is cheap.
-            t = ops.replicate(t, self.tensor_parallelism_size)
+            t = ops.replicate(t, self.tensor_parallelism_size).clone(
+                devices=self.devices
+            )
 
         return t
