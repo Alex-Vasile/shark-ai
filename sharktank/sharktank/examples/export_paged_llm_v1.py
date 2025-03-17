@@ -31,16 +31,24 @@ def pipeline_parallelize_theta(
     """Pipeline parallelize theta."""
     # TODO: Still modifies the shards, but the signature doesn't imply this
     def f(tensor: ShardedTensor, devices: Tuple[int, ...]) -> ShardedTensor:
+        if isinstance(tensor, DefaultPrimitiveTensor):
+            tensor_ett = ExternalTensorTrait.get(tensor._data)
+            tensor = ReplicatedTensor(ts=tensor._data, shard_count=1, name=tensor.name)
+            if tensor_ett is not None:
+                ExternalTensorTrait(
+                    tensor_ett.external_scope,
+                    tensor_ett.external_name,
+                ).set(tensor.shards[0]._data)
         for i, shard in enumerate(tensor.shards):
             DeviceTensorTrait(devices[i]).set(shard._data)
         return tensor.clone(devices=devices)
 
-    # TODO: SHould token_embd, output_norm and output tensors be considered when splitting the workload across GPUs?
-
-    shard_count = theta.tensor("token_embd")["weight"].shard_count
     num_blocks = len(theta.tensor("blk"))
-
-    # Nothing to do for token_embd, already pinned and on correct devices.
+    _t = theta.tensor("token_embd")["weight"]
+    if isinstance(_t, DefaultPrimitiveTensor):
+        shard_count = 1
+    else:
+        shard_count = _t.shard_count
 
     block_to_device_lookup = []
     block_indices = sorted(theta.tensor("blk").keys(), key=lambda item: int(item))
@@ -57,10 +65,15 @@ def pipeline_parallelize_theta(
         for t_name in block_data.keys():
             block_data[t_name]["weight"] = f(block_data[t_name]["weight"], devices)
 
-    theta.tensor("output_norm")["weight"] = f(
-        theta.tensor("output_norm")["weight"], devices
+    theta.tensor("token_embd")["weight"] = f(
+        theta.tensor("token_embd")["weight"], block_to_device_lookup[0]
     )
-    theta.tensor("output")["weight"] = f(theta.tensor("output")["weight"], devices)
+    theta.tensor("output_norm")["weight"] = f(
+        theta.tensor("output_norm")["weight"], block_to_device_lookup[-1]
+    )
+    theta.tensor("output")["weight"] = f(
+        theta.tensor("output")["weight"], block_to_device_lookup[-1]
+    )
 
     return tuple(block_to_device_lookup)
 
@@ -134,9 +147,15 @@ def main():
         else args.tensor_parallelism_size
     )
 
-    block_to_device_lookup = pipeline_parallelize_theta(
-        dataset.root_theta, args.pipeline_parallelism_size
-    )
+    if args.pipeline_parallelism_size > 1:
+        block_to_device_lookup = pipeline_parallelize_theta(
+            dataset.root_theta, args.pipeline_parallelism_size
+        )
+    else:
+        block_to_device_lookup = tuple(
+            tuple(range(args.tensor_parallelism_size))
+            for _ in range(len(dataset.root_theta.tensor("blk")))
+        )
 
     llama_config = LlamaModelConfig(
         hp,
@@ -212,12 +231,12 @@ def main():
             arg_affinities = {}
             shard_dim = None
 
-            if llama_config.pipeline_parallelism_size > 1:
-                pass  # TODO
-
             # TODO: This should go into the cache __init__
             # Need to unpack that state when sharded (for tracing support reasons)
-            if llama_config.tensor_parallelism_size > 1:
+            if (
+                llama_config.tensor_parallelism_size > 1
+                or llama_config.pipeline_parallelism_size > 1
+            ):
                 shard_dim = cache_state[0].shard_dim
 
                 unpacked = [[shard._data for shard in cs.shards] for cs in cache_state]
@@ -245,7 +264,6 @@ def main():
     def repack_cache(
         cache, shard_dim, pipeline_to_device_lookup: tuple[tuple[int, ...], ...]
     ) -> list[SplitPrimitiveTensor]:
-        pass
         return [
             SplitPrimitiveTensor(
                 ts=c,
@@ -273,7 +291,10 @@ def main():
             model, llama_config.tensor_parallelism_size
         )
 
-        if llama_config.tensor_parallelism_size > 1:
+        if (
+            llama_config.tensor_parallelism_size > 1
+            or llama_config.pipeline_parallelism_size > 1
+        ):
             # We need to offset the indices for the cache
             arg_affinities = {key + 3: arg_affinities[key] for key in arg_affinities}
 
@@ -311,7 +332,13 @@ def main():
                 input_mask = model.input_mask(seq_lens, sl)
                 attention_mask = model.attention_mask(input_mask)
 
-            if llama_config.tensor_parallelism_size != 1:
+            if (
+                llama_config.tensor_parallelism_size == 1
+                and llama_config.pipeline_parallelism_size == 1
+            ):
+                attention_mask = [attention_mask]
+                seq_block_ids = [seq_block_ids]
+            else:
                 shard_count = llama_config.tensor_parallelism_size
 
                 tokens = ops.replicate(tokens, count=shard_count).clone(
@@ -369,7 +396,10 @@ def main():
             arg_affinities,
         ) = setup_cache(model, llama_config.tensor_parallelism_size)
 
-        if llama_config.tensor_parallelism_size > 1:
+        if (
+            llama_config.tensor_parallelism_size > 1
+            or llama_config.pipeline_parallelism_size > 1
+        ):
             # We need to offset the indices for the cache
             arg_affinities = {key + 4: arg_affinities[key] for key in arg_affinities}
 
