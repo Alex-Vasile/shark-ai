@@ -31,7 +31,13 @@ def pipeline_parallelize_theta(
     # TODO: Still modifies the shards, but the signature doesn't imply this
     def f(tensor: ShardedTensor, devices: Tuple[int, ...]) -> ShardedTensor:
         if isinstance(tensor, DefaultPrimitiveTensor):
-            tensor = ReplicatedTensor(ts=tensor._data, shard_count=1)
+            tensor_ett = ExternalTensorTrait.get(tensor._data)
+            tensor = ReplicatedTensor(ts=tensor._data, shard_count=1, name=tensor.name)
+            if tensor_ett is not None:
+                ExternalTensorTrait(
+                    tensor_ett.external_scope,
+                    tensor_ett.external_name,
+                ).set(tensor.shards[0]._data)
         for i, shard in enumerate(tensor.shards):
             DeviceTensorTrait(devices[i]).set(shard._data)
         return tensor.clone(devices=devices)
@@ -215,7 +221,10 @@ def main():
 
             # TODO: This should go into the cache __init__
             # Need to unpack that state when sharded (for tracing support reasons)
-            if llama_config.tensor_parallelism_size > 1:
+            if (
+                llama_config.tensor_parallelism_size > 1
+                or llama_config.pipeline_parallelism_size > 1
+            ):
                 shard_dim = cache_state[0].shard_dim
 
                 unpacked = [[shard._data for shard in cs.shards] for cs in cache_state]
@@ -233,13 +242,6 @@ def main():
                         arg_affinities[i] = DeviceAffinity(
                             str(first_device_of_pipeline)
                         )
-            else:
-                if llama_config.pipeline_parallelism_size > 1:
-                    shard_dim = cache_state[0].shard_dim
-                    unpacked = [
-                        [shard._data for shard in cs.shards] for cs in cache_state
-                    ]
-                    dynamic_shapes = [[ds] for ds in dynamic_shapes]
 
             return unpacked, shard_dim, dynamic_shapes, arg_affinities
 
@@ -286,7 +288,10 @@ def main():
             model, llama_config.tensor_parallelism_size
         )
 
-        if llama_config.tensor_parallelism_size > 1:
+        if (
+            llama_config.tensor_parallelism_size > 1
+            or llama_config.pipeline_parallelism_size > 1
+        ):
             # We need to offset the indices for the cache
             arg_affinities = {key + 3: arg_affinities[key] for key in arg_affinities}
 
@@ -388,7 +393,10 @@ def main():
             arg_affinities,
         ) = setup_cache(model, llama_config.tensor_parallelism_size)
 
-        if llama_config.tensor_parallelism_size > 1:
+        if (
+            llama_config.tensor_parallelism_size > 1
+            or llama_config.pipeline_parallelism_size > 1
+        ):
             # We need to offset the indices for the cache
             arg_affinities = {key + 4: arg_affinities[key] for key in arg_affinities}
 
