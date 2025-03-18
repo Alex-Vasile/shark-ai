@@ -595,6 +595,14 @@ def equal_split(a: SplitPrimitiveTensor, b: AnyTensor) -> bool:
     return a.is_deep_equal(b)
 
 
+@expand.override(ReplicatedTensor)
+def expand_replicated(tensor: ReplicatedTensor, shape: List[int]) -> ReplicatedTensor:
+    assert len(shape) == len(tensor.shape)
+
+    shards = [expand(shard, shape) for shard in tensor.shards]
+    return tensor.clone(ts=shards)
+
+
 @expand.override(SplitPrimitiveTensor)
 def expand_split(
     tensor: SplitPrimitiveTensor, shape: List[int]
@@ -684,6 +692,25 @@ def shareded_group_norm_affine(input, weight, bias, *, num_groups, eps):
     ]
 
     return SplitPrimitiveTensor(shard_dim=1, ts=result_shards)
+
+
+@index_copy_.override(SplitPrimitiveTensor, ReplicatedTensor, ReplicatedTensor)
+def index_copy__split_replicated_split(
+    inout: SplitPrimitiveTensor,
+    dim: int,
+    index: ReplicatedTensor,
+    tensor: ReplicatedTensor,
+) -> SplitPrimitiveTensor:
+    assert (
+        inout.shard_count == index.shard_count
+        and inout.shard_count == tensor.shard_count
+    )
+    assert inout.shard_dim != dim
+    for inout_shard, index_shard, tensor_shard in zip(
+        inout.shards, index.shards, tensor.shards
+    ):
+        index_copy_(inout_shard, dim, index_shard, tensor_shard)
+    return inout
 
 
 @index_copy_.override(SplitPrimitiveTensor, ReplicatedTensor, SplitPrimitiveTensor)
@@ -998,12 +1025,44 @@ def matmul_split(
 
 # Scaled dot product attention
 @scaled_dot_product_attention.override(
+    ReplicatedTensor, ReplicatedTensor, ReplicatedTensor, Optional[ReplicatedTensor]
+)
+def scaled_dot_product_attention_replicated(
+    q: ReplicatedTensor,
+    k: ReplicatedTensor,
+    v: ReplicatedTensor,
+    a: Optional[ReplicatedTensor],
+    is_causal: bool,
+    scale: float,
+) -> ReplicatedTensor:
+    if q.shard_count != k.shard_count or q.shard_count != v.shard_count:
+        raise ValueError("Incompatible number of shards for qkv")
+
+    if a and q.shard_count != a.shard_count:
+        raise ValueError(
+            f"Incompatible number of shards for a ({a.shard_count}) should be ({q.shard_count})"
+        )
+    a_shards = [None] * q.shard_count if a is None else a.shards
+
+    output_shards = []
+    for q_s, k_s, v_s, a_s in zip(q.shards, k.shards, v.shards, a_shards):
+        o_s = scaled_dot_product_attention(
+            q_s, k_s, v_s, a_s, is_causal=is_causal, scale=scale
+        )
+        output_shards.append(o_s)
+
+    return ReplicatedTensor(ts=output_shards)
+
+
+@scaled_dot_product_attention.override(
     SplitPrimitiveTensor,
     SplitPrimitiveTensor,
     SplitPrimitiveTensor,
     Optional[ReplicatedTensor],
 )
-def scaled_dot_product_attention_sharded(q, k, v, a, is_causal, scale) -> Tensor:
+def scaled_dot_product_attention_sharded(
+    q, k, v, a, is_causal, scale
+) -> SplitPrimitiveTensor:
     if q.shard_count != k.shard_count or q.shard_count != v.shard_count:
         raise ValueError("Incompatible number of shards for qkv")
 
@@ -1345,6 +1404,14 @@ def to_split(tensor: SplitPrimitiveTensor, *args, **kwargs):
     return SplitPrimitiveTensor(ts=shards, shard_dim=tensor.shard_dim)
 
 
+@transpose.override(ReplicatedTensor)
+def transpose_replicated(
+    tensor: ReplicatedTensor, dim0: int, dim1: int
+) -> ReplicatedTensor:
+    shards = [transpose(shard, dim0, dim1) for shard in tensor.shards]
+    return ReplicatedTensor(ts=shards)
+
+
 @transpose.override(SplitPrimitiveTensor)
 def transpose_split(
     tensor: SplitPrimitiveTensor, dim0: int, dim1: int
@@ -1356,6 +1423,14 @@ def transpose_split(
     elif shard_dim == dim1:
         shard_dim = dim0
     return SplitPrimitiveTensor(ts=shards, shard_dim=shard_dim)
+
+
+@unflatten.override(ReplicatedTensor)
+def unflatten_split(
+    input: ReplicatedTensor, dim: int, sizes: Tuple[int]
+) -> ReplicatedTensor:
+    shards = [unflatten(shard, dim, sizes) for shard in input.shards]
+    return input.clone(ts=shards)
 
 
 @unflatten.override(SplitPrimitiveTensor)
