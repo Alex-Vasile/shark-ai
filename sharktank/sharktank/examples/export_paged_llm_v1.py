@@ -503,9 +503,9 @@ def main():
     if not args.skip_prefill:
         for bs in args.bs_prefill:
             generate_batch_prefill(bs)
-    if not args.skip_decode:
-        for bs in args.bs_decode:
-            generate_batch_decode(bs)
+    # if not args.skip_decode:
+    #     for bs in args.bs_decode:
+    #         generate_batch_decode(bs)
 
     config = generate_params_json(hp, args.bs_prefill, args.bs_decode)
     print("GENERATED!")
