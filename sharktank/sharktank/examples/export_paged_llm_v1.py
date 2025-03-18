@@ -36,14 +36,12 @@ def pipeline_parallelize_theta(
             DeviceTensorTrait(devices[i]).set(shard._data)
         return tensor.clone(devices=devices)
 
+    num_blocks = len(theta.tensor("blk"))
     _t = theta.tensor("token_embd")["weight"]
     if isinstance(_t, DefaultPrimitiveTensor):
         shard_count = 1
     else:
         shard_count = _t.shard_count
-    num_blocks = len(theta.tensor("blk"))
-
-    # Nothing to do for token_embd, already pinned and on correct devices.
 
     block_to_device_lookup = []
     block_indices = sorted(theta.tensor("blk").keys(), key=lambda item: int(item))
@@ -60,10 +58,15 @@ def pipeline_parallelize_theta(
         for t_name in block_data.keys():
             block_data[t_name]["weight"] = f(block_data[t_name]["weight"], devices)
 
-    theta.tensor("output_norm")["weight"] = f(
-        theta.tensor("output_norm")["weight"], devices
+    theta.tensor("token_embd")["weight"] = f(
+        theta.tensor("token_embd")["weight"], block_to_device_lookup[0]
     )
-    theta.tensor("output")["weight"] = f(theta.tensor("output")["weight"], devices)
+    theta.tensor("output_norm")["weight"] = f(
+        theta.tensor("output_norm")["weight"], block_to_device_lookup[-1]
+    )
+    theta.tensor("output")["weight"] = f(
+        theta.tensor("output")["weight"], block_to_device_lookup[-1]
+    )
 
     return tuple(block_to_device_lookup)
 
@@ -210,9 +213,6 @@ def main():
             arg_affinities = {}
             shard_dim = None
 
-            if llama_config.pipeline_parallelism_size > 1:
-                pass  # TODO
-
             # TODO: This should go into the cache __init__
             # Need to unpack that state when sharded (for tracing support reasons)
             if llama_config.tensor_parallelism_size > 1:
@@ -233,6 +233,13 @@ def main():
                         arg_affinities[i] = DeviceAffinity(
                             str(first_device_of_pipeline)
                         )
+            else:
+                if llama_config.pipeline_parallelism_size > 1:
+                    shard_dim = cache_state[0].shard_dim
+                    unpacked = [
+                        [shard._data for shard in cs.shards] for cs in cache_state
+                    ]
+                    dynamic_shapes = [[ds] for ds in dynamic_shapes]
 
             return unpacked, shard_dim, dynamic_shapes, arg_affinities
 
@@ -251,7 +258,6 @@ def main():
     def repack_cache(
         cache, shard_dim, pipeline_to_device_lookup: tuple[tuple[int, ...], ...]
     ) -> list[SplitPrimitiveTensor]:
-        pass
         return [
             SplitPrimitiveTensor(
                 ts=c,
@@ -318,7 +324,13 @@ def main():
                 input_mask = model.input_mask(seq_lens, sl)
                 attention_mask = model.attention_mask(input_mask)
 
-            if llama_config.tensor_parallelism_size != 1:
+            if (
+                llama_config.tensor_parallelism_size == 1
+                and llama_config.pipeline_parallelism_size == 1
+            ):
+                attention_mask = [attention_mask]
+                seq_block_ids = [seq_block_ids]
+            else:
                 shard_count = llama_config.tensor_parallelism_size
 
                 tokens = ops.replicate(tokens, count=shard_count).clone(
@@ -342,9 +354,6 @@ def main():
                 cache_tensors = repack_cache(
                     cs, cache_shard_dim, model.cache.pipeline_to_device_lookup
                 )
-            else:
-                attention_mask = [attention_mask]
-                seq_block_ids = [seq_block_ids]
 
             logits = model.prefill(
                 tokens,
