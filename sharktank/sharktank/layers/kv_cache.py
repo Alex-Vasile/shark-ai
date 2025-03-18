@@ -128,8 +128,7 @@ class PagedKVCache:
         assert (
             len(state) == self.pipeline_count
         ), f"Expected {self.pipeline_count}-element state. Got: {len(state)}"
-        if self.shard_count == 1:
-            assert self.pipeline_count == 1
+        if self.shard_count == 1 and self.pipeline_count == 1:
             assert all(
                 not isinstance(page_slab, SplitPrimitiveTensor) for page_slab in state
             )
@@ -163,6 +162,8 @@ class PagedKVCache:
         First it needs to be reinterpreted into the actual shape.
         The split the head dimension, then flatten each shard.
         This is a work-around for the lack of block-cyclic sharded tensor type."""
+        if self.shard_count == 1:
+            assert self.pipeline_count == 1, "Unimplemented and/or untested."
         if self.shard_count == 1:
             return state
 
@@ -255,6 +256,9 @@ class PagedKVCache:
         approach to reading by materializing linearly may not be terribly
         efficient unless if the compiler can fuse the gather.
         """
+        if self.shard_count == 1:
+            assert self.pipeline_count == 1, "Unimplemented and/or untested."
+
         page_tables = self.unflatten_page_tables(state)  # 6D
         page_table = page_tables[self.block_to_pipeline_lookup[transformer_block_index]]
 
