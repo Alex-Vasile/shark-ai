@@ -64,9 +64,7 @@ class RotaryEmbeddingLayer(BaseLayer):
                 rotary_embed_table=table,
             )
 
-        assert (
-            isinstance(table, ShardedTensor) and xt.shard_count == table.shard_count
-        )
+        assert isinstance(table, ShardedTensor) and xt.shard_count == table.shard_count
         rotary_shards = [unbox_tensor(shard) for shard in table.shards]
 
         xt_shards = [
