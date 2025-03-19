@@ -197,6 +197,7 @@ def transfer_if_needed(*tensors: Tuple[ShardedTensor]) -> List[ShardedTensor]:
 def all_gather_split(
     input: SplitPrimitiveTensor, *, dim: int | None
 ) -> ReplicatedTensor:
+    assert len(input.shards) > 1
     dim = input.shard_dim if dim is None else dim
 
     gathered = cat(
@@ -225,6 +226,9 @@ def all_gather_split(
 def all_reduce_split_or_unreduced(
     input: Union[SplitPrimitiveTensor, UnreducedTensor],
 ) -> ReplicatedTensor:
+    if len(input.shards) == 1:
+        return ReplicatedTensor(ts=input.shards, devices=input.devices, pinned=False)
+
     reduced = functools.reduce(
         lambda x, y: elementwise(torch.add, x, y),
         [
