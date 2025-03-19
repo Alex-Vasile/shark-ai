@@ -884,9 +884,9 @@ for types in itertools.product([Tensor, ShardedTensor], repeat=2):
 
 
 @matmul.override(ReplicatedTensor, ReplicatedTensor)
-def matmul_replicated_lhs_replicated_rhs(
+def matmul_replicated(
     lhs: ReplicatedTensor, rhs: SplitPrimitiveTensor, *, transpose_rhs: bool
-) -> SplitPrimitiveTensor | UnreducedTensor:
+) -> ReplicatedTensor:
     assert lhs.shard_count == rhs.shard_count
 
     if transpose_rhs:
