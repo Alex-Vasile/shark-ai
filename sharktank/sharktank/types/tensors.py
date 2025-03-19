@@ -1093,7 +1093,9 @@ class SplitPrimitiveTensor(ShardedTensorBase):
             shard_count = None
 
         assert shard_count is None
-        assert len(ts) > 0
+        assert (
+            len(ts) > 1
+        ), "SplitTensor must have at least 2 shards. Use ReplicatedTensor for 1 shard."
         first_shape = ts[0].shape
         assert len(first_shape) > shard_dim
         expected_shape = list(first_shape)
