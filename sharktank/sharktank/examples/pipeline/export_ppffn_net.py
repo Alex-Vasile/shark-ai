@@ -106,20 +106,47 @@ class PPFFN(ThetaLayer):
         return x.clone(ts=shards, devices=next_devices)
 
     def forward(self, x: torch.Tensor):
+        # return self.forward_simple(x)
+        return self.forward_real(x)
+
+    def forward_simple(self, x: torch.Tensor):
         num_blocks = len(self.block_to_device_lookup)
         shard_count = self.theta.tensor("w", "0").shard_count
 
+        def make_unreduced(
+            t: torch.Tensor, devices: tuple[int, ...]
+        ) -> UnreducedTensor:
+            shards = [
+                (
+                    ops.transfer_to_logical_device(t, devices[i])
+                    if i != 0
+                    else ops.barrier_on_logical_device(t, devices[i])
+                )
+                for i in range(shard_count)
+            ]
+            return UnreducedTensor(ts=shards, devices=devices)
+
+        x = make_unreduced(x, devices=self.theta.tensor("w", "0").devices)
+        for layer in range(num_blocks):
+            _x = ops.unshard(x)
+            x = make_unreduced(_x, devices=x.devices)
+            x = x.clone(devices=self.theta.tensor("w", str(layer)).devices)
+
+        return ops.unshard(x)
+
+    def forward_real(self, x: torch.Tensor):
+        num_blocks = len(self.theta.tensor("w"))
+        shard_count = self.theta.tensor("w", "0").shard_count
         x = ReplicatedTensor(
             ts=x, shard_count=shard_count, devices=self.block_to_device_lookup[0]
         )
-        for block in range(num_blocks):
-            weight: SplitPrimitiveTensor | ReplicatedTensor = self.theta.tensor(
-                "w", str(block)
-            )
-            x: ReplicatedTensor = ops.replicate(ops.linear(x, weight), shard_count)
-
-            x = self._inter_layer_callback(x, block)
-
+        for _ in range(repeat_count := 1):
+            for block in range(num_blocks):
+                weight: SplitPrimitiveTensor | ReplicatedTensor = self.theta.tensor(
+                    "w", str(block)
+                )
+                x = ops.replicate(ops.linear(x, weight), shard_count)
+                x = self._inter_layer_callback(x, block)
         return ops.unshard(x)
 
 
