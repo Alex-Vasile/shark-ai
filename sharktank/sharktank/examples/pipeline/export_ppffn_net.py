@@ -63,18 +63,33 @@ def pipeline_parallelize_theta(
         devices = tuple(i + zero_4_group for i in range(shard_count))
         block_to_device_lookup.append(devices)
 
-        if isinstance(weight, PrimitiveTensor):
-            ett = ExternalTensorTrait.get(weight._data)
-            weight = ReplicatedTensor(ts=weight._data, shard_count=1, name=weight.name)
-            if ett is not None:
-                ExternalTensorTrait(
-                    ett.external_scope,
-                    ett.external_name,
-                ).set(weight.shards[0]._data)
-        for i, shard in enumerate(weight.shards):
-            DeviceTensorTrait(devices[i]).set(shard._data)
-        theta.tensor("w")[block] = weight.clone(devices=devices)
+        (original_shards, old_devices) = (
+            ([weight], (0,))
+            if isinstance(weight, PrimitiveTensor)
+            else (weight.shards, weight.devices)
+        )
+        new_shards = ShardedTensor.move_shards_to_new_devices(
+            original_shards, old_devices=old_devices, new_devices=devices
+        )
 
+        for i, (original_shard, new_shard) in enumerate(
+            zip(original_shards, new_shards)
+        ):
+            DeviceTensorTrait(devices[i]).set(new_shard._data)
+
+            original_tensor_trait = ExternalTensorTrait.get(original_shard._data)
+            if original_tensor_trait:
+                ExternalTensorTrait(
+                    original_tensor_trait.external_scope,
+                    original_tensor_trait.external_name,
+                ).set(new_shard._data)
+
+        if isinstance(weight, PrimitiveTensor):
+            weight = ReplicatedTensor(ts=new_shards, name=weight.name, devices=devices)
+        else:
+            weight = weight.clone(ts=new_shards, devices=devices)
+
+        theta.tensor("w")[block] = weight
     return block_to_device_lookup
 
 
