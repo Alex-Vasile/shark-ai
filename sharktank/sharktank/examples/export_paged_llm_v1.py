@@ -282,12 +282,16 @@ def main():
 
     def repack_cache(
         cache, shard_dim, pipeline_to_device_lookup: tuple[tuple[int, ...], ...]
-    ) -> list[SplitPrimitiveTensor]:
+    ) -> list[ShardedTensor]:
         return [
-            SplitPrimitiveTensor(
-                ts=c,
-                shard_dim=shard_dim,
-                devices=pipeline_to_device_lookup[pipeline],
+            (
+                SplitPrimitiveTensor(
+                    ts=c,
+                    shard_dim=shard_dim,
+                    devices=pipeline_to_device_lookup[pipeline],
+                )
+                if len(c) > 1
+                else ReplicatedTensor(ts=c, devices=pipeline_to_device_lookup[pipeline])
             )
             for pipeline, c in enumerate(cache)
         ]
