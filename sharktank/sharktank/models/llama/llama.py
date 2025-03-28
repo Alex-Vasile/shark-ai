@@ -123,6 +123,27 @@ class PagedLlamaModelV1(BaseCausalLMModel):
             ]
         )
 
+    def _inter_layer_callback(self, x: ShardedTensor, curr_block: int) -> ShardedTensor:
+        from ... import ops
+
+        if curr_block == len(self.config.block_to_device_lookup) - 1:
+            return x
+
+        curr_devices = self.config.block_to_device_lookup[curr_block]
+        next_devices = self.config.block_to_device_lookup[curr_block + 1]
+        if all(d_curr == d_next for d_curr, d_next in zip(curr_devices, next_devices)):
+            return x
+
+        shards = [
+            (
+                ops.transfer_to_logical_device(shard, next_devices[i])
+                if next_devices[i] != curr_devices[i]
+                else ops.barrier_on_logical_device(shard, next_devices[i])
+            )
+            for i, shard in enumerate(x.shards)
+        ]
+        return x.clone(ts=shards, devices=next_devices)
+
     def prefill(
         self,
         # [bs, batch_seq_len]
@@ -161,6 +182,7 @@ class PagedLlamaModelV1(BaseCausalLMModel):
                     self.cache.block_to_pipeline_lookup[block_idx]
                 ],
             )
+            h = self._inter_layer_callback(h, block_idx)
             self.trace_tensor(f"llama.attn_block.{block_idx}.output", h)
 
         h = self.output_norm(h)
