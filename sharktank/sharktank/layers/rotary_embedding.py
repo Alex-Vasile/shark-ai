@@ -70,7 +70,8 @@ class RotaryEmbeddingLayer(BaseLayer):
                         rotary_embed_table=unbox_tensor(t),
                     )
                     for s, t in zip(xt.shards, table.shards)
-                ]
+                ],
+                devices=table.devices,
             )
 
         if not isinstance(xt, ShardedTensor):
@@ -317,8 +318,6 @@ class RotaryEmbeddingLayer(BaseLayer):
     def _replicate(self, t):
         if self.tensor_parallelism_size > 1 or self.pipeline_parallelism:
             # Replicate across all devices, the data is not a lot and the computation is cheap.
-            t = ops.replicate(t, self.tensor_parallelism_size).clone(
-                devices=self.devices
-            )
+            t = ops.replicate(t, self.tensor_parallelism_size, devices=self.devices)
 
         return t
