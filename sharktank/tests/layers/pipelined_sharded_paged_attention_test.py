@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import unittest
-from sharktank.layers import PagedKVCache
+from sharktank.layers import PagedAttention
 import torch
 from sharktank.utils import iterables_equal
 from copy import deepcopy
@@ -14,7 +14,7 @@ from sharktank import ops
 from sharktank.types import SplitPrimitiveTensor
 
 
-class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
+class PipelinedShardedPagedAttentionTest(unittest.TestCase):
     """Verify that the pipelined sharded paged KV cache behaves as the unpipelined unsharded variant."""
 
     def setUp(self):
@@ -42,7 +42,7 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
             )
         self.block_to_device_lookup = tuple(block_to_device_lookup)
 
-        self.cache = PagedKVCache(
+        self.cache = PagedAttention(
             transformer_block_count=self.transformer_block_count,
             attn_head_count=self.attn_head_count,
             block_seq_stride=self.block_seq_stride,
@@ -50,7 +50,7 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
             cache_partition_count=self.cache_partition_count,
             dtype=self.dtype,
         )
-        self.pipelined_sharded_cache = PagedKVCache(
+        self.pipelined_sharded_cache = PagedAttention(
             shard_count=self.shard_count,
             block_to_device_lookup=self.block_to_device_lookup,
             transformer_block_count=self.transformer_block_count,
