@@ -267,10 +267,7 @@ def main():
     ) -> list[SplitPrimitiveTensor]:
         return [
             SplitPrimitiveTensor(
-                ts=c,
-                shard_dim=shard_dim,
-                devices=pipeline_to_device_lookup[pipeline],
-                pinned=True,
+                ts=c, shard_dim=shard_dim, devices=pipeline_to_device_lookup[pipeline]
             )
             for pipeline, c in enumerate(cache)
         ]
