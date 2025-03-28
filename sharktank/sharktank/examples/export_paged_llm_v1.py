@@ -364,21 +364,27 @@ def main():
             else:
                 shard_count = llama_config.tensor_parallelism_size
 
-                tokens = ops.replicate(tokens, count=shard_count).clone(
-                    devices=llama_config.block_to_device_lookup[0]
+                tokens = ops.replicate(
+                    tokens,
+                    count=shard_count,
+                    devices=llama_config.block_to_device_lookup[0],
                 )
                 if attention_mask is None:
                     attention_mask = [None] * model.cache.pipeline_count
                 else:
                     attention_mask = [
-                        ops.replicate(attention_mask, count=shard_count).clone(
-                            devices=model.cache.pipeline_to_device_lookup[pipeline]
+                        ops.replicate(
+                            attention_mask,
+                            count=shard_count,
+                            devices=model.cache.pipeline_to_device_lookup[pipeline],
                         )
                         for pipeline in range(model.cache.pipeline_count)
                     ]
                 seq_block_ids = [
-                    ops.replicate(seq_block_ids, count=shard_count).clone(
-                        devices=model.cache.pipeline_to_device_lookup[pipeline]
+                    ops.replicate(
+                        seq_block_ids,
+                        count=shard_count,
+                        devices=model.cache.pipeline_to_device_lookup[pipeline],
                     )
                     for pipeline in range(model.cache.pipeline_count)
                 ]
@@ -469,27 +475,27 @@ def main():
             if llama_config.tensor_parallelism_size != 1:
                 shard_count = llama_config.tensor_parallelism_size
 
-                tokens = ops.replicate(tokens, count=shard_count).clone(
-                    devices=llama_config.block_to_device_lookup[0]
+                tokens = ops.replicate(
+                    tokens,
+                    count=shard_count,
+                    devices=llama_config.block_to_device_lookup[0],
                 )
 
                 _attention_mask, _start_positions, _seq_block_ids = [], [], []
                 for pipeline in range(model.cache.pipeline_count):
                     devices = model.cache.pipeline_to_device_lookup[pipeline]
                     _attention_mask.append(
-                        ops.replicate(attention_mask, count=shard_count).clone(
-                            devices=devices
+                        ops.replicate(
+                            attention_mask, count=shard_count, devices=devices
                         )
                     )
                     _start_positions.append(
-                        ops.replicate(start_positions, count=shard_count).clone(
-                            devices=devices
+                        ops.replicate(
+                            start_positions, count=shard_count, devices=devices
                         )
                     )
                     _seq_block_ids.append(
-                        ops.replicate(seq_block_ids, count=shard_count).clone(
-                            devices=devices
-                        )
+                        ops.replicate(seq_block_ids, count=shard_count, devices=devices)
                     )
                 attention_mask, start_positions, seq_block_ids = (
                     _attention_mask,
