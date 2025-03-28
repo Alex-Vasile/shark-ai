@@ -67,7 +67,7 @@ class PagedAttention:
         dtype: torch.dtype = torch.float32,
         device: Optional[torch.device] = None,
         shard_count: int = 1,
-        block_to_device_lookup: tuple[tuple[int, ...], ...] = None,
+        block_to_device_lookup: tuple[tuple[int, ...], ...] | None = None,
     ):
         self.transformer_block_count = transformer_block_count
         self.head_count_kv = attn_head_count
