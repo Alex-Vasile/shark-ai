@@ -37,7 +37,9 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         for block in range(self.transformer_block_count):
             pp_group = int(block * self.pipeline_count / self.transformer_block_count)
             zero_4_group = self.shard_count * pp_group
-            block_to_device_lookup.append(tuple(i + zero_4_group for i in range(self.shard_count)))
+            block_to_device_lookup.append(
+                tuple(i + zero_4_group for i in range(self.shard_count))
+            )
         self.block_to_device_lookup = tuple(block_to_device_lookup)
 
         self.cache = PagedKVCache(
@@ -101,7 +103,6 @@ class PipelinedShardedPagedKVCacheTest(unittest.TestCase):
         )
         assert len(cache_state) == 1
         assert len(pipelined_sharded_cache_allocation) == self.pipeline_count
-        assert all(t.pinned for t in pipelined_sharded_cache_allocation)
         assert all(t.shape[0] == self.page_count for t in cache_state)
         assert cache_state[0].shape[1] == sum(
             t.shape[1] for t in pipelined_sharded_cache_allocation

@@ -154,10 +154,7 @@ class PagedAttention:
                 ]
                 unflattened.append(
                     SplitPrimitiveTensor(
-                        ts=shards,
-                        shard_dim=4,
-                        devices=page_slab.devices,
-                        pinned=page_slab.pinned,
+                        ts=shards, shard_dim=4, devices=page_slab.devices
                     )
                 )
             return unflattened
@@ -203,7 +200,6 @@ class PagedAttention:
                     ts=shards_flattened,
                     shard_dim=1,
                     devices=self.pipeline_to_device_lookup[pipeline],
-                    pinned=True,
                 )
             )
         return flat_sharded_page_tables
@@ -235,9 +231,7 @@ class PagedAttention:
             return shards[0]
 
         return [
-            SplitPrimitiveTensor(
-                ts=shards[i], shard_dim=1, devices=devices, pinned=True
-            )
+            SplitPrimitiveTensor(ts=shards[i], shard_dim=1, devices=devices)
             for i, devices in enumerate(self.pipeline_to_device_lookup)
         ]
 
