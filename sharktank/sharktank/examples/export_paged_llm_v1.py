@@ -30,18 +30,29 @@ def pipeline_parallelize_theta(
 ) -> tuple[tuple[int, ...], ...]:
     """Pipeline parallelize theta."""
     # TODO: Still modifies the shards, but the signature doesn't imply this
-    def f(tensor: ShardedTensor, devices: Tuple[int, ...]) -> ShardedTensor:
-        if isinstance(tensor, DefaultPrimitiveTensor):
-            tensor_ett = ExternalTensorTrait.get(tensor._data)
-            tensor = ReplicatedTensor(ts=tensor._data, shard_count=1, name=tensor.name)
-            if tensor_ett is not None:
+    def f(weight: ShardedTensor, new_devices: Tuple[int, ...]) -> ShardedTensor:
+        (old_shards, old_devices) = (
+            ([weight], (0,))
+            if isinstance(weight, PrimitiveTensor)
+            else (weight.shards, weight.devices)
+        )
+        new_shards = ShardedTensor.move_shards_to_new_devices(
+            old_shards, old_devices=old_devices, new_devices=new_devices
+        )
+
+        for i, (old_shard, new_shard) in enumerate(zip(old_shards, new_shards)):
+            DeviceTensorTrait(new_devices[i]).set(new_shard._data)
+            if orig_tensor_trait := ExternalTensorTrait.get(old_shard._data):
                 ExternalTensorTrait(
-                    tensor_ett.external_scope,
-                    tensor_ett.external_name,
-                ).set(tensor.shards[0]._data)
-        for i, shard in enumerate(tensor.shards):
-            DeviceTensorTrait(devices[i]).set(shard._data)
-        return tensor.clone(devices=devices)
+                    orig_tensor_trait.external_scope,
+                    orig_tensor_trait.external_name,
+                ).set(new_shard._data)
+
+        return (
+            ReplicatedTensor(ts=new_shards, name=weight.name, devices=new_devices)
+            if isinstance(weight, PrimitiveTensor)
+            else weight.clone(ts=new_shards, devices=new_devices)
+        )
 
     num_blocks = len(theta.tensor("blk"))
     _t = theta.tensor("token_embd")["weight"]
