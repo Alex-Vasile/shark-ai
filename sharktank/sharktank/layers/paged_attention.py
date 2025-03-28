@@ -152,8 +152,12 @@ class PagedAttention:
                     for shard in page_slab.shards
                 ]
                 unflattened.append(
-                    SplitPrimitiveTensor(
-                        ts=shards, shard_dim=4, devices=page_slab.devices
+                    (
+                        SplitPrimitiveTensor(
+                            ts=shards, shard_dim=4, devices=page_slab.devices
+                        )
+                        if len(shards) > 1
+                        else ReplicatedTensor(ts=shards, devices=page_slab.devices)
                     )
                 )
             return unflattened
@@ -232,7 +236,11 @@ class PagedAttention:
 
         # TODO: Should I return a replicated tensor (special calse for TP=1 and PP>1) or just use the splittensor behaviour below?
         return [
-            SplitPrimitiveTensor(ts=shards[i], shard_dim=1, devices=devices)
+            (
+                SplitPrimitiveTensor(ts=shards[i], shard_dim=1, devices=devices)
+                if len(shards[i]) > 1
+                else ReplicatedTensor(ts=shards[i], devices=devices)
+            )
             for i, devices in enumerate(self.pipeline_to_device_lookup)
         ]
 
