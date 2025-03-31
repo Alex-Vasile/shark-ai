@@ -254,15 +254,13 @@ def main():
                     [ds] * llama_config.tensor_parallelism_size for ds in dynamic_shapes
                 ]
 
-                # TODO: What order do these come in at?
+                # Cache is unpacked as [[pipeline 0 shards], [pipeline 1 shards], ...]
+                # Therefore pipeline index is in outer loop.
                 for pipeline in range(llama_config.pipeline_parallelism_size):
                     for tp in range(llama_config.tensor_parallelism_size):
                         i = pipeline * llama_config.tensor_parallelism_size + tp
-                        first_device_of_pipeline = (
-                            model.cache.pipeline_to_device_lookup[pipeline][0]
-                        )
                         arg_affinities[i] = DeviceAffinity(
-                            str(first_device_of_pipeline)
+                            str(model.cache.pipeline_to_device_lookup[pipeline][tp])
                         )
 
             return unpacked, shard_dim, dynamic_shapes, arg_affinities
