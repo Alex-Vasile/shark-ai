@@ -509,12 +509,12 @@ class PagedAttention:
         mask: Optional[torch.Tensor] = None,
         probs_quantizer: Optional[StaticScaledQuantizer] = None,
     ):
-        self.write(
-            cache_state,
-            cache_partitions=[k, v],
-            transformer_block_index=block_index,
-            page_ids=seq_block_ids,
-        )
+        # self.write(
+        #     cache_state,
+        #     cache_partitions=[k, v],
+        #     transformer_block_index=block_index,
+        #     page_ids=seq_block_ids,
+        # )
 
         return self.attention(
             q=q,

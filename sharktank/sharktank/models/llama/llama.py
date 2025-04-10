@@ -133,8 +133,8 @@ class PagedLlamaModelV1(BaseCausalLMModel):
         self._assert_device(attention_mask, dtype=self.activation_dtype)
         self._assert_device(seq_block_ids)
         self._assert_device(*cache_state, dtype=self.activation_dtype)
-
-        h = self.token_embedding(tokens)
+        h = tokens.unsqueeze(2).expand(-1, -1, 256)
+        # h = self.token_embedding(tokens)
         self.trace_tensor("llama.token_embedding", h)
 
         # Iterate over attention blocks.

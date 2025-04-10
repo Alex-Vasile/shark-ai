@@ -119,9 +119,9 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         x = h  # self.attn_norm(h)
         bs, batch_seq_len, _ = x.shape
 
-        xq = self.attn_q(x)
-        xk = self.attn_k(x)
-        xv = self.attn_v(x)
+        xq = x  # self.attn_q(x)
+        xk = x[..., : x.shape[-1] // 2]  # self.attn_k(x)
+        xv = x[..., : x.shape[-1] // 2]  # self.attn_v(x)
 
         assert xq.shape[-1] == self.head_count * self.head_dim
         assert xk.shape[-1] == self.head_count_kv * self.head_dim
@@ -190,8 +190,8 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.flatten(2, 3)
         # Project.
-        attn_output = self.attn_output(attn_output)
-        attn_output = self.attn_output_norm(attn_output)
+        # attn_output = self.attn_output(attn_output)
+        # attn_output = self.attn_output_norm(attn_output)
 
         h = h + attn_output
         return h
