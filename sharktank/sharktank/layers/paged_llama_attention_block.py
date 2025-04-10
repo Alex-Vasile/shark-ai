@@ -116,7 +116,7 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         cache_state: list[torch.Tensor] = None,
     ):
         assert bool(start_index is not None) ^ bool(embedding_batch_mask is not None)
-        x = self.attn_norm(h)
+        x = h  # self.attn_norm(h)
         bs, batch_seq_len, _ = x.shape
 
         xq = self.attn_q(x)
