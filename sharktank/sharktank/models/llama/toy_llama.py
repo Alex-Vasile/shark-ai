@@ -33,7 +33,7 @@ def generate(seed):
         hp=LlamaHParams(
             context_length=block_seq_stride * max_blocks,
             embedding_length=attention_head_count * attn_head_dim,
-            block_count=3,
+            block_count=1,
             feed_forward_length=23,
             rope_dimension_count=rope_dimension_count,
             rope_freq_base=500000.0,
