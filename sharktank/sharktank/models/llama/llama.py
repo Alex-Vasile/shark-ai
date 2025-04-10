@@ -291,8 +291,8 @@ class AttentionFFNBlock(ThetaLayer):
         )
 
         # Feed forward network.
-        ffn_input = self.ffn_norm(h)
-        ffn_down = self.ffn(ffn_input)
-        final_output = h + ffn_down
+        # ffn_input = self.ffn_norm(h)
+        # ffn_down = self.ffn(ffn_input)
+        # final_output = h + ffn_down
 
-        return final_output
+        return h
