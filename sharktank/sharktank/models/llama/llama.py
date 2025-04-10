@@ -151,9 +151,9 @@ class PagedLlamaModelV1(BaseCausalLMModel):
             )
             self.trace_tensor(f"llama.attn_block.{block_idx}.output", h)
 
-        h = self.output_norm(h)
-        logits = self.output_lm_head(h)
-        return logits
+        # h = self.output_norm(h)
+        # logits = self.output_lm_head(h)
+        return h
 
     def decode(
         self,
