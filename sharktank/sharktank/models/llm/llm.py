@@ -238,8 +238,10 @@ class PagedLlmModelV1(BaseCausalLMModel):
             embedding_batch_masks.append(mask)
             # TODO: How to name and trace this properly
             self.trace_tensor("llama.embedding_batch_mask", mask)
+        import sharktank.ops as ops
 
-        h = self.token_embedding(tokens)
+        h = ops.expand(tokens, list(tokens.shape) + [256])
+        # h = self.token_embedding(tokens)
         self.trace_tensor("llama.token_embedding", h)
 
         # TODO: Get the normalization factor via configuration
