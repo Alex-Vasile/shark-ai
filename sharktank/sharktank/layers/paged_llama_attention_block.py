@@ -120,20 +120,20 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         cache_state: list[torch.Tensor] = None,
     ):
         assert bool(start_index is not None) ^ bool(embedding_batch_mask is not None)
-        x = self.attn_norm(h)
+        x = h  # self.attn_norm(h)
         bs, batch_seq_len, _ = x.shape
 
-        xq = self.attn_q(x)
-        xk = self.attn_k(x)
-        xv = self.attn_v(x)
+        # xq = self.attn_q(x)
+        # xk = self.attn_k(x)
+        # xv = self.attn_v(x)
 
-        assert xq.shape[-1] == self.head_count * self.head_dim
-        assert xk.shape[-1] == self.head_count_kv * self.head_dim
-        assert xv.shape[-1] == self.head_count_kv * self.head_dim
+        # assert xq.shape[-1] == self.head_count * self.head_dim
+        # assert xk.shape[-1] == self.head_count_kv * self.head_dim
+        # assert xv.shape[-1] == self.head_count_kv * self.head_dim
 
-        xq = xq.view(bs, batch_seq_len, self.head_count, self.head_dim)
-        xk = xk.view(bs, batch_seq_len, self.head_count_kv, self.head_dim)
-        xv = xv.view(bs, batch_seq_len, self.head_count_kv, self.head_dim)
+        xq = x.view(bs, batch_seq_len, self.head_count, self.head_dim)
+        xk = x.view(bs, batch_seq_len, self.head_count_kv, self.head_dim)
+        xv = x.view(bs, batch_seq_len, self.head_count_kv, self.head_dim)
 
         # Fast path to start_index based embedding lookup if available.
         # Falls back to a slower position based index lookup.
@@ -194,8 +194,8 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.flatten(2, 3)
         # Project.
-        attn_output = self.attn_output(attn_output)
-        attn_output = self.attn_output_norm(attn_output)
+        # attn_output = self.attn_output(attn_output)
+        # attn_output = self.attn_output_norm(attn_output)
 
-        h = h + attn_output
+        # h = h + attn_output
         return h

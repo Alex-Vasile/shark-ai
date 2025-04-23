@@ -54,7 +54,7 @@ def pipeline_parallelize_theta(
 
     _t = theta.tensor("token_embd")["weight"]
     shard_count = 1 if isinstance(_t, DefaultPrimitiveTensor) else _t.shard_count
-    num_blocks = len(theta.tensor("blk"))
+    num_blocks = 2  # len(theta.tensor("blk"))
 
     block_to_device_lookup = []
     block_indices = sorted(theta.tensor("blk").keys(), key=lambda item: int(item))
@@ -62,6 +62,9 @@ def pipeline_parallelize_theta(
         bi == i for i, bi in enumerate(block_indices)
     ), "Blocks assumed to be numbered contiguously from [0, N-1]"
     for blk_idx in block_indices:
+        if int(blk_idx) >= num_blocks:
+            theta.tensor("blk").pop(blk_idx)
+            continue
         pp_group = int(int(blk_idx) * pipeline_parallelism_size / num_blocks)
         zero_4_group = shard_count * pp_group
         devices = tuple(i + zero_4_group for i in range(shard_count))

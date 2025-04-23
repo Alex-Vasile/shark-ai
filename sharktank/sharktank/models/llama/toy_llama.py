@@ -24,7 +24,7 @@ def generate(seed):
     max_blocks = 8
     attention_head_count = 8
     attn_head_dim = 32
-    attention_head_count_kv = 4
+    attention_head_count_kv = 8
     rope_dimension_count = 32
     vocabulary_size = 256
 
@@ -33,7 +33,7 @@ def generate(seed):
             context_length=block_seq_stride * max_blocks,
             embedding_length=attention_head_count * attn_head_dim,
             block_count=3,
-            feed_forward_length=23,
+            feed_forward_length=256,
             rope_dimension_count=rope_dimension_count,
             rope_freq_base=500000.0,
             attention_head_count=attention_head_count,

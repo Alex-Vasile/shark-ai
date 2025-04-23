@@ -179,7 +179,7 @@ class PagedLlmModelV1(BaseCausalLMModel):
             h = self._inter_layer_callback(h, block_idx)
             self.trace_tensor(f"llama.attn_block.{block_idx}.output", h)
 
-        h = self.output_norm(h)
+        # h = self.output_norm(h)
         logits = self.output_lm_head(h)
 
         if self.inference_norm:
@@ -272,8 +272,8 @@ class PagedLlmModelV1(BaseCausalLMModel):
             h = self._inter_layer_callback(h, block_idx)
             self.trace_tensor(f"llama.attn_block.{block_idx}.output", h)
 
-        h = self.output_norm(h)
-        logits = self.output_lm_head(h)
+        # h = self.output_norm(h)
+        logits = h  # self.output_lm_head(h)
 
         if self.inference_norm:
             logits = logits / math.sqrt(3.0)
@@ -398,6 +398,6 @@ class AttentionFFNBlock(ThetaLayer):
         )
 
         # Feed forward network.
-        final_output = self.ffn(h)
+        final_output = h  # self.ffn(h)
 
         return final_output

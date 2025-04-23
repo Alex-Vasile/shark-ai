@@ -59,6 +59,7 @@ def main():
     dataset_type = "irpa" if "irpa" in dataset_type else "gguf"
     dataset = cli.get_input_dataset(args)
     hp = configs.LlamaHParams.from_gguf_props(dataset.properties)
+    hp.block_count = 2
     tensor_parallelism_size = (
         dataset.properties["tensor_parallelism_size"]
         if "tensor_parallelism_size" in dataset.properties
