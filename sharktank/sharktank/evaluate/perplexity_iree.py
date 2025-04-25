@@ -9,6 +9,7 @@ import logging
 import json
 import time
 from tqdm import tqdm
+from typing import Any
 
 import torch
 import iree.runtime as ireert
