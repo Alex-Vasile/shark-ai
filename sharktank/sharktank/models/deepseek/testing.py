@@ -10,15 +10,20 @@ import torch
 from sharktank.types.tensors import *
 from sharktank.types.theta import Theta
 from sharktank.utils.testing import make_rand_torch
-from sharktank.layers.testing import make_latent_attention_block_theta
+from sharktank.layers.testing import (
+    make_latent_attention_block_theta,
+    make_ffn_block_theta,
+)
 from sharktank.layers.configs.llm_configs import LlamaModelConfig
 
 
 def make_deepseek_attention_block(
     *,
     block_idx: int,
-    dim: int,
-    heads: int,
+    head_count: int,
+    head_dim: int,
+    embedding_length: int,
+    feed_forward_length: int,
     qk_rope_head_dim: int,
     qk_nope_head_dim: int,
     kv_latent_dim: int,
@@ -29,8 +34,8 @@ def make_deepseek_attention_block(
 ) -> Theta:
     attention_theta = make_latent_attention_block_theta(
         block_idx=block_idx,
-        dim=dim,
-        heads=heads,
+        head_count=head_count,
+        embedding_length=embedding_length,
         qk_rope_head_dim=qk_rope_head_dim,
         qk_nope_head_dim=qk_nope_head_dim,
         kv_latent_dim=kv_latent_dim,
@@ -38,9 +43,20 @@ def make_deepseek_attention_block(
         v_head_dim=v_head_dim,
         dtype=dtype,
     )
-    moe_theta = make_moe_block_theta(block_idx=block_idx)
+
+    if block_idx >= n_dense_layers:
+        ffn_theta = make_moe_block_theta(block_idx=block_idx)
+    else:
+        ffn_theta = make_ffn_block_theta(
+            block_idx=block_idx,
+            head_count=head_count,
+            head_dim=head_dim,
+            embedding_length=embedding_length,
+            feed_forward_length=feed_forward_length,
+            dtype=dtype,
+        )
     res_dict = attention_theta.tree
-    res_dict.update(moe_theta.tree)
+    res_dict.update(ffn_theta.tree)
     return Theta(res_dict)
 
 
@@ -98,15 +114,17 @@ def make_random_deepseek_theta(
     for i in range(config.hp.block_count):
         res[f"blk.{i}"] = make_deepseek_attention_block(
             block_idx=i,
-            dim=config.hp.embedding_length,
-            heads=config.hp.attention_head_count,
+            head_count=config.hp.attention_head_count,
+            head_dim=config.hp.attn_head_dim,
+            embedding_length=config.hp.embedding_length,
+            feed_forward_length=config.hp.feed_forward_length,
+            q_lora_rank=config.hp.q_lora_rank,
             qk_rope_head_dim=config.hp.qk_rope_head_dim,
             qk_nope_head_dim=config.hp.qk_nope_head_dim,
             kv_latent_dim=config.hp.kv_lora_rank,
             v_head_dim=config.hp.v_head_dim,
-            dtype=dtype,
             n_dense_layers=config.hp.n_dense_layers,
-            q_lora_rank=config.hp.q_lora_rank,
+            dtype=dtype,
         ).tree
 
     res[f"output.weight"] = DefaultPrimitiveTensor(

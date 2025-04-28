@@ -36,6 +36,7 @@ class LlamaHParams:
     Comments are only provided if they differ from this source.
     """
 
+    # Attention config
     model_arch: str
     context_length: int
     embedding_length: int
@@ -45,10 +46,6 @@ class LlamaHParams:
     attn_head_dim: int
     attention_layer_norm_rms_epsilon: float
     attention_head_count_kv: int
-    rope_dimension_count: Optional[int] = None
-    rope_freq_base: Optional[float] = None
-    expert_count: Optional[int] = None
-    expert_used_count: Optional[int] = None
 
     # Deepseek Multi-Latent Attention config
     q_lora_rank: Optional[int] = None
@@ -57,21 +54,29 @@ class LlamaHParams:
     qk_rope_head_dim: Optional[int] = None
     v_head_dim: Optional[int] = None
 
+    # Grok Attention config
+    attention_softcap: Optional[float] = None
+
+    # RoPE config
+    rope_dimension_count: Optional[int] = None
+    rope_freq_base: Optional[float] = None
+
     # Deepseek RoPE+YaRN config
     rope_scaling_type: Optional[str] = None
     rope_scaling_factor: Optional[float] = None
     rope_scaling_original_context_length: Optional[int] = None
     rope_scaling_yarn_log_multiplier: Optional[float] = None
 
+    # MoE config
+    expert_count: Optional[int] = None
+    expert_used_count: Optional[int] = None
+
     # Deepseek MoE config
     expert_shared_count: Optional[int] = None
-    route_scale: Optional[float] = None
     n_expert_groups: Optional[int] = None
     n_limited_groups: Optional[int] = None
     n_dense_layers: Optional[int] = None
-
-    # Grok configurations
-    attention_softcap: Optional[float] = None
+    route_scale: Optional[float] = None
 
     @staticmethod
     def from_gguf_props(p: dict[str, Any]):
@@ -140,29 +145,29 @@ class LlamaHParams:
                 p, f"{name_prefix}.attention.head_count_kv", attention_head_count
             ),
             attn_head_dim=attn_head_dim,
-            rope_dimension_count=rope_dimension_count,
-            rope_freq_base=_optional_float_prop(
-                p, f"{name_prefix}.rope.freq_base", default_rope_freq_base
+            q_lora_rank=q_lora_rank,
+            kv_lora_rank=kv_lora_rank,
+            qk_nope_head_dim=qk_nope_head_dim,
+            qk_rope_head_dim=qk_rope_head_dim,
+            v_head_dim=v_head_dim,
+            route_scale=route_scale,
+            n_dense_layers=_optional_int_prop(
+                p, f"{name_prefix}.leading_dense_block_count", defaut_n_dense_layers
             ),
+            attention_softcap=attention_softcap,
             expert_count=_optional_int_prop(
                 p, f"{name_prefix}.expert_count", default_expert_count
             ),
             expert_used_count=_optional_int_prop(
                 p, f"{name_prefix}.expert_used_count", default_expert_used_count
             ),
-            route_scale=route_scale,
-            n_dense_layers=_optional_int_prop(
-                p, f"{name_prefix}.leading_dense_block_count", defaut_n_dense_layers
-            ),
-            attention_softcap=attention_softcap,
+            expert_shared_count=expert_shared_count,
             n_expert_groups=n_expert_groups,
             n_limited_groups=n_limited_groups,
-            expert_shared_count=expert_shared_count,
-            q_lora_rank=q_lora_rank,
-            kv_lora_rank=kv_lora_rank,
-            qk_nope_head_dim=qk_nope_head_dim,
-            qk_rope_head_dim=qk_rope_head_dim,
-            v_head_dim=v_head_dim,
+            rope_dimension_count=rope_dimension_count,
+            rope_freq_base=_optional_float_prop(
+                p, f"{name_prefix}.rope.freq_base", default_rope_freq_base
+            ),
             rope_scaling_type=rope_scaling_type,
             rope_scaling_factor=rope_scaling_factor,
             rope_scaling_original_context_length=rope_scaling_original_context_length,
@@ -180,14 +185,36 @@ class LlamaHParams:
             f"{self.model_arch}.attention.layer_norm_rms_epsilon": self.attention_layer_norm_rms_epsilon,
             f"{self.model_arch}.attention.head_count_kv": self.attention_head_count_kv,
         }
-        if self.rope_dimension_count is not None:
-            res[f"{self.model_arch}.rope.dimension_count"] = self.rope_dimension_count
-        if self.rope_freq_base is not None:
-            res[f"{self.model_arch}.rope.freq_base"] = self.rope_freq_base
+        if self.q_lora_rank is not None:
+            res[f"{self.model_arch}.attention.q_lora_rank"] = self.q_lora_rank
+        if self.kv_lora_rank is not None:
+            res[f"{self.model_arch}.attention.kv_lora_rank"] = self.kv_lora_rank
+        if self.route_scale is not None:
+            res[f"{self.model_arch}.expert_weights_scale"] = self.route_scale
+        if self.n_dense_layers is not None:
+            res[f"{self.model_arch}.leading_dense_block_count"] = self.n_dense_layers
         if self.expert_count is not None:
             res[f"{self.model_arch}.expert_count"] = self.expert_count
         if self.expert_used_count is not None:
             res[f"{self.model_arch}.expert_used_count"] = self.expert_used_count
+        if self.expert_shared_count is not None:
+            res[f"{self.model_arch}.expert_shared_count"] = self.expert_shared_count
+        if self.rope_dimension_count is not None:
+            res[f"{self.model_arch}.rope.dimension_count"] = self.rope_dimension_count
+        if self.rope_freq_base is not None:
+            res[f"{self.model_arch}.rope.freq_base"] = self.rope_freq_base
+        if self.rope_scaling_type is not None:
+            res[f"{self.model_arch}.rope.scaling.type"] = self.rope_scaling_type
+        if self.rope_scaling_factor is not None:
+            res[f"{self.model_arch}.rope.scaling.factor"] = self.rope_scaling_factor
+        if self.rope_scaling_original_context_length is not None:
+            res[
+                f"{self.model_arch}.rope.scaling.original_context_length"
+            ] = self.rope_scaling_original_context_length
+        if self.rope_scaling_yarn_log_multiplier is not None:
+            res[
+                f"{self.model_arch}.rope.scaling.yarn_log_multiplier"
+            ] = self.rope_scaling_yarn_log_multiplier
         return res
 
 
