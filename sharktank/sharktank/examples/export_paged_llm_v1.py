@@ -226,6 +226,7 @@ def main():
             name=f"prefill_bs{bs}",
             args=(tokens, seq_lens, seq_block_ids, cache),
             strict=args.strict,
+            dynamic_shapes=dynamic_shapes,
             arg_device=arg_affinities,
         )
         def _(model, tokens, seq_lens, seq_block_ids, cs):
@@ -343,6 +344,7 @@ def main():
                 seq_block_ids,
                 cache_state,
             ),
+            dynamic_shapes=dynamic_shapes,
             strict=args.strict,
             arg_device=arg_affinities,
         )
