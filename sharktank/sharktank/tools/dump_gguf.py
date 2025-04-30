@@ -29,15 +29,20 @@ def main():
         "--tensor-regex", type=str, help="Only dumps tensors matching a regex"
     )
     parser.add_argument(
-        "--save", type=Path, help="Save the GGUF dataset to an IRPA file"
+        "--output-irpa", type=Path, help="Save the GGUF dataset to an IRPA file"
     )
     parser.add_argument(
-        "--save-num-blocks", type=int, help="Number of tensors to save to an IRPA file"
+        "--num-blocks", type=int, help="Number of tensors to save to an IRPA file"
     )
     parser.add_argument(
         "--save-input-output-blocks",
         action="store_true",
         help="Save input and output tensors",
+    )
+    parser.add_argument(
+        "--log-tensors",
+        action="store_true",
+        help="Print tensor name and shape for all or num_blocks",
     )
 
     cli.add_input_dataset_options(parser)
@@ -49,12 +54,12 @@ def main():
     logger.setLevel(args.loglevel)
 
     model_arch = config.properties.get("general.architecture", "llama")
-    if args.save_num_blocks:
-        config.properties[f"{model_arch}.block_count"] = args.save_num_blocks
-        save_num_blocks = list(range(0, args.save_num_blocks))
-        logger.info(f"  Saving {save_num_blocks} blocks")
+    if args.num_blocks:
+        config.properties[f"{model_arch}.block_count"] = args.num_blocks
+        num_blocks = list(range(0, args.num_blocks))
+        logger.info(f"  Saving {num_blocks} blocks")
     else:
-        save_num_blocks = range(0, config.properties[f"{model_arch}.block_count"])
+        num_blocks = range(0, config.properties[f"{model_arch}.block_count"])
 
     logger.info("  Properties:")
     for key, value in config.properties.items():
@@ -69,14 +74,16 @@ def main():
             save = True
 
         # Save input/output layer tensors
-        if "blk" not in tensor.name and args.save_input_output_blocks:
+        if "blk" not in tensor.name and (
+            args.save_input_output_blocks or args.log_tensors
+        ):
             save = True
-        elif args.save_num_blocks and int(tensor.name.split(".")[1]) in save_num_blocks:
-            # Save tensors of if in save_num_blocks
+        elif int(tensor.name.split(".")[1]) in num_blocks:
+            # Save tensors if in num_blocks
             save = True
 
-        if save:
-            logger.info(f"  {tensor.name}")
+        if save and args.log_tensors:
+            logger.info(f"  {tensor.name}: {tensor.shape}")
             tensors += [
                 DefaultPrimitiveTensor(data=tensor.as_torch(), name=tensor.name)
             ]
@@ -104,7 +111,8 @@ def main():
     props = config.properties
     dataset = Dataset(props, theta)
 
-    dataset.save(args.save, io_report_callback=logger.debug)
+    if args.output_irpa:
+        dataset.save(args.output_irpa, io_report_callback=logger.debug)
 
 
 def _maybe_dump_tensor(args, t: InferenceTensor):

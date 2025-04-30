@@ -141,13 +141,15 @@ class RoutedExpertsSharding(ThetaLayerSharding):
                     shard_count=self.shard_count
                 ).theta_sharding(),
                 "ffn_gate_exps": LinearSplitParallelWeightAndBiasSharding(
-                    shard_count=self.shard_count
+                    shard_count=self.shard_count,
+                    weight_and_bias_spit_dim=1,
                 ).theta_sharding(),
-                "ffn_up_exps": LinearSplitParallelWeightAndBiasSharding(
-                    shard_count=self.shard_count
+                "ffn_up_exps": LinearSplitReductionDimSharding(
+                    shard_count=self.shard_count,
+                    weight_and_bias_spit_dim=1,
                 ).theta_sharding(),
                 "ffn_down_exps": LinearSplitReductionDimSharding(
-                    shard_count=self.shard_count
+                    shard_count=self.shard_count, reduction_dim=2
                 ).theta_sharding(),
                 "exp_probs_b": Ignore(),
             }
@@ -231,10 +233,10 @@ class LinearSplitParallelWeightAndBiasSharding(LinearLayerSharding):
 
 
 class LinearSplitReductionDimSharding(LinearLayerSharding):
-    def __init__(self, shard_count: int):
+    def __init__(self, shard_count: int, reduction_dim: int = 1):
         super().__init__(
             premul_input=Replicated(shard_count=shard_count),
-            weight=Split(shard_count=shard_count, shard_dim=1),
+            weight=Split(shard_count=shard_count, shard_dim=reduction_dim),
             bias=Replicated(shard_count=shard_count),
         )
 

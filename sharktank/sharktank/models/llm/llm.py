@@ -307,6 +307,7 @@ class AttentionFFNBlock(ThetaLayer):
     ):
         super().__init__(theta)
 
+        # print('block_index', block_index)
         attention_kernel = (
             "decomposed" if config.hp.model_arch == "grok" else config.attention_kernel
         )
@@ -380,6 +381,7 @@ class AttentionFFNBlock(ThetaLayer):
                     moe_activation=moe_activation,
                     score_experts=score_experts,
                     normalize_experts=normalize_experts,
+                    shard_count=config.tensor_parallelism_size,
                 ),
             )
         else:

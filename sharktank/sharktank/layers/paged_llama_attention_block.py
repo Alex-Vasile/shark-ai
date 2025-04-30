@@ -40,7 +40,6 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         attention_kernel: str = "torch",
         v_head_dim: Optional[int] = None,
         rope_dimension_count: Optional[int] = None,
-        attention_dtype: Optional[torch.dtype] = None,
         attention_scale: Optional[float] = None,
         softcap: Optional[float] = None,
         fake_quant: Optional[bool] = True,
@@ -59,6 +58,7 @@ class PagedLlamaAttentionBlock(ThetaLayer):
             device=cache.device,
             shard_count=cache.shard_count,
         )
+        self.shard_count = cache.shard_count
         self.paged_attention = cache
         self.block_index = block_index
         self.head_count = head_count
@@ -149,14 +149,22 @@ class PagedLlamaAttentionBlock(ThetaLayer):
                 q = self.wq(x).unflatten(2, (self.head_count, -1))
             else:
                 q = self.wq_b(self.q_norm(self.wq_a(x)))
+                # print('q0', type(self.q_norm(self.wq_a(x))))
+                if not isinstance(q, ReplicatedTensor):
+                    q = ops.replicate(q, count=self.shard_count)
                 q = q.unflatten(2, (self.head_count, -1))
 
-            qk_nope_head_dim = q.shape[-1] - self.rope_dimension_count
+            # print('q1', type(q))
+            qk_nope_head_dim = (
+                q.shape[-1] - self.rope_dimension_count
+            )  # might want to replicate from here
             q_nope = q[:, :, :, :qk_nope_head_dim]
             q_rope = q[:, :, :, qk_nope_head_dim:]
 
-            kv = self.wkv_a(x)
-            kv_nope_size = kv.shape[-1] - self.rope_dimension_count
+            kv = self.wkv_a(x)  # split
+            kv_nope_size = (
+                kv.shape[-1] - self.rope_dimension_count
+            )  # might want to replicate from here
             kv_nope = kv[:, :, :kv_nope_size]
             k_rope = kv[:, :, kv_nope_size:]
 
@@ -171,13 +179,23 @@ class PagedLlamaAttentionBlock(ThetaLayer):
                     xt=k_rope.unsqueeze(2), mask=embedding_batch_mask
                 )
 
+            # print('q_nope', type(q_nope), type(q_rope))
             xq = ops.cat((q_nope, q_rope), dim=-1)
 
             ##TODO: Restructure this to apply the wkv_b post attention instead of here
+            # print('self.kv_norm', self.kv_norm.shape)
             kv_norm = self.kv_norm(kv_nope)
-            wkv_b = self.wkv_b(kv_norm).unflatten(2, (self.head_count, -1))
+            # print('wkv_b', type(kv_norm))
+            wkv_b = self.wkv_b(kv_norm)
+            if not isinstance(wkv_b, ReplicatedTensor):
+                wkv_b = ops.replicate(wkv_b, count=self.shard_count)
+            wkv_b = wkv_b.unflatten(2, (self.head_count, -1))  # split
 
-            k_nope = wkv_b[:, :, :, :qk_nope_head_dim]
+            # print('wkv_b', type(wkv_b))
+
+            k_nope = wkv_b[
+                :, :, :, :qk_nope_head_dim
+            ]  # might want to replicate from here
             xv = wkv_b[:, :, :, qk_nope_head_dim:]
 
             k_rope = ops.repeat(k_rope, (1, 1, k_nope.shape[2] // k_rope.shape[2], 1))
@@ -188,6 +206,7 @@ class PagedLlamaAttentionBlock(ThetaLayer):
                 k_rope = ops.reshard_split(
                     k_rope, dim=k_nope.shard_dim, count=k_nope.shard_count
                 )
+            # print('k_nope', type(k_nope), type(k_rope))
 
             xk = ops.cat((k_nope, k_rope), dim=-1)
 
@@ -215,7 +234,9 @@ class PagedLlamaAttentionBlock(ThetaLayer):
                 xq = embedding.apply_batched_mask(xt=xq, mask=embedding_batch_mask)
                 xk = embedding.apply_batched_mask(xt=xk, mask=embedding_batch_mask)
 
-        return xq, xk, xv
+        # print('q', type(xq), xq.shape, 'k', type(xk), xk.shape, 'v', type(xv), xv.shape, xk.shard_dim, xv.shard_dim, xk.shard_count)
+        # xq = ops.reshard_split(xq, dim=xk.shard_dim, count=xk.shard_count)
+        return xq, xk, xv  # would be replicated deepseek
 
     def forward(
         self,
@@ -231,6 +252,9 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         cache_state: list[torch.Tensor] = None,
     ):
         assert bool(start_index is not None) ^ bool(embedding_batch_mask is not None)
+        # print('h', type(h))
+        if not isinstance(h, ReplicatedTensor):
+            h = ops.replicate(h, count=self.shard_count)
         x = self.attn_norm(h)
 
         xq, xk, xv = self.pre_process_attention(
@@ -287,6 +311,7 @@ class PagedLlamaAttentionBlock(ThetaLayer):
                 scale=self.attention_scale,
                 softcap=self.softcap,
             )
+        # attn_output is sharded
         # Drop padded part of attn_output
         if self.attn_type == "mla" and self.head_dim != self.v_head_dim:
             attn_output = attn_output[:, :, :, : self.v_head_dim]

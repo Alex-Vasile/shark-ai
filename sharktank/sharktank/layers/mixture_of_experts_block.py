@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from sharktank.types import Theta, ShardedTensor
 from sharktank.layers import *
 
-from sharktank.ops import softmax, topk, zeros_like
+from sharktank.ops import softmax, topk, zeros_like, replicate
 
 __all__ = [
     "MoeBlock",
@@ -36,6 +36,7 @@ class MoeBlock(ThetaLayer):
         *,
         score_experts=softmax,
         normalize_experts=True,
+        shard_count: int = 1,
         expert_count: Optional[int] = None,
         n_expert_groups: Optional[int] = None,
         n_limited_groups: Optional[int] = None,
@@ -52,6 +53,7 @@ class MoeBlock(ThetaLayer):
         self.ffn_gate_inp = torch.nn.Identity()
         self.layer_output_norm = torch.nn.Identity()
         self.shared_experts = None
+        self.shard_count = shard_count
 
         # Add router gate
         if theta.optional_tensor("ffn_gate_inp") is not None:
@@ -80,6 +82,7 @@ class MoeBlock(ThetaLayer):
         router_logits = self.ffn_gate_inp(ffn_input)
         router_weights = self.score_experts(router_logits.to(torch.float))
 
+        router_weights = replicate(router_weights, count=self.shard_count)
         # self.n_expert_groups = None
         # self.n_limited_groups = None
         # Select top k experts from router weights
@@ -88,6 +91,15 @@ class MoeBlock(ThetaLayer):
 
             scores_for_choice = router_weights.view(-1, self.expert_count)
 
+            print(
+                type(
+                    router_weights.view(
+                        -1,
+                        self.n_expert_groups,
+                        self.expert_count // self.n_expert_groups,
+                    )
+                )
+            )
             group_scores = (
                 router_weights.view(
                     -1, self.n_expert_groups, self.expert_count // self.n_expert_groups
