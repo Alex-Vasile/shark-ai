@@ -184,6 +184,10 @@ class PagedLlmModelV1(BaseCausalLMModel):
 
         if self.inference_norm:
             logits = logits / math.sqrt(3.0)
+
+        if "float8" in str(logits.dtype) or logits.dtype == torch.bfloat16:
+            return logits.to(dtype=torch.float16)
+
         return logits
 
     def decode(
@@ -275,6 +279,10 @@ class PagedLlmModelV1(BaseCausalLMModel):
 
         if self.inference_norm:
             logits = logits / math.sqrt(3.0)
+
+        if "float8" in str(logits.dtype) or logits.dtype == torch.bfloat16:
+            return logits.to(dtype=torch.float16)
+
         return logits
 
 
