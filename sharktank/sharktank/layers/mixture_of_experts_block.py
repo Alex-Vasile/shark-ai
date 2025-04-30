@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from sharktank.types import Theta, ShardedTensor
 from sharktank.layers import *
 
-from sharktank.ops import softmax, topk, to
+from sharktank.ops import softmax, topk, zeros_like
 
 __all__ = [
     "MoeBlock",
@@ -78,7 +78,7 @@ class MoeBlock(ThetaLayer):
         # For each token, the router calculates the router weights for all experts
         # router_logits: (batch_size * sequence_length, expert_count)
         router_logits = self.ffn_gate_inp(ffn_input)
-        router_weights = self.score_experts(to(router_logits, torch.float))
+        router_weights = self.score_experts(router_logits.to(torch.float))
 
         # self.n_expert_groups = None
         # self.n_limited_groups = None
@@ -96,7 +96,7 @@ class MoeBlock(ThetaLayer):
                 .sum(dim=-1)
             )
             group_idx = topk(group_scores, k=self.n_limited_groups, dim=-1)[1]
-            group_mask = torch.zeros_like(group_scores)
+            group_mask = zeros_like(group_scores)
             group_mask.scatter_(1, group_idx, 1)
             score_mask = (
                 group_mask.unsqueeze(-1)
