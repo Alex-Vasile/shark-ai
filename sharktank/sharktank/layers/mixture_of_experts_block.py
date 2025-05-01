@@ -34,6 +34,7 @@ class MoeBlock(ThetaLayer):
         rms_epsilon: float,
         moe_activation=torch.nn.functional.silu,
         *,
+        experts_ffn_moe_block: PreGatherFFNMOE | DenseFFNMOE | str = "DenseFFNMOE",
         score_experts=softmax,
         normalize_experts=True,
         shard_count: int = 1,
@@ -59,6 +60,18 @@ class MoeBlock(ThetaLayer):
         if theta.optional_tensor("ffn_gate_inp") is not None:
             self.add_module("ffn_gate_inp", LinearLayer(theta("ffn_gate_inp")))
 
+        if isinstance(experts_ffn_moe_block, str):
+            if experts_ffn_moe_block == "PreGatherFFNMOE":
+                self.routed_experts = PreGatherFFNMOE(theta, activation=moe_activation)
+            elif experts_ffn_moe_block == "DenseFFNMOE":
+                self.routed_experts = DenseFFNMOE(theta, activation_fn=moe_activation)
+            else:
+                raise ValueError(
+                    f'Unknown experts_ffn_moe_block "{experts_ffn_moe_block}"'
+                )
+        else:
+            self.routed_experts = experts_ffn_moe_block
+
         if theta.optional_tensor("ffn_gate_shexp") is not None:
             self.shared_experts = FFN(theta=theta, activation_fn=moe_activation)
 
@@ -67,8 +80,6 @@ class MoeBlock(ThetaLayer):
             self.layer_output_norm = RMSNormLayer(
                 theta("layer_output_norm"), epsilon=rms_epsilon
             )
-
-        self.routed_experts = PreGatherFFNMOE(theta, activation=moe_activation)
 
     def forward(
         self,

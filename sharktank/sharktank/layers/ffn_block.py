@@ -6,6 +6,7 @@
 
 from typing import Callable
 
+import torch
 import torch.nn.functional as F
 from sharktank import ops
 from sharktank.types import AnyTensor
@@ -25,9 +26,13 @@ class FFN(ThetaLayer):
         self,
         theta: Theta,
         is_gated: bool = True,
-        activation_fn: Callable[[AnyTensor], AnyTensor] = F.silu,
+        activation_fn: Callable[[torch.Tensor], torch.Tensor] = F.silu,
         fake_quant: bool = False,
     ):
+        """
+        add_residual:
+            At the end of the block add to the input.
+        """
         super().__init__(theta)
 
         self.is_gated = is_gated
