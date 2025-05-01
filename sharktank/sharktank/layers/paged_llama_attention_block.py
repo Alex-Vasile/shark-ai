@@ -150,8 +150,8 @@ class PagedLlamaAttentionBlock(ThetaLayer):
             else:
                 q = self.wq_b(self.q_norm(self.wq_a(x)))
                 # print('q0', type(self.q_norm(self.wq_a(x))))
-                if not isinstance(q, ReplicatedTensor):
-                    q = ops.replicate(q, count=self.shard_count)
+                # if not isinstance(q, ReplicatedTensor):
+                #     q = ops.replicate(q, count=self.shard_count)
                 q = q.unflatten(2, (self.head_count, -1))
 
             # print('q1', type(q))
@@ -187,8 +187,8 @@ class PagedLlamaAttentionBlock(ThetaLayer):
             kv_norm = self.kv_norm(kv_nope)
             # print('wkv_b', type(kv_norm))
             wkv_b = self.wkv_b(kv_norm)
-            if not isinstance(wkv_b, ReplicatedTensor):
-                wkv_b = ops.replicate(wkv_b, count=self.shard_count)
+            # if not isinstance(wkv_b, ReplicatedTensor):
+            #     wkv_b = ops.replicate(wkv_b, count=self.shard_count)
             wkv_b = wkv_b.unflatten(2, (self.head_count, -1))  # split
 
             # print('wkv_b', type(wkv_b))
@@ -253,8 +253,8 @@ class PagedLlamaAttentionBlock(ThetaLayer):
     ):
         assert bool(start_index is not None) ^ bool(embedding_batch_mask is not None)
         # print('h', type(h))
-        if not isinstance(h, ReplicatedTensor):
-            h = ops.replicate(h, count=self.shard_count)
+        # if not isinstance(h, ReplicatedTensor):
+        # h = ops.replicate(h, count=self.shard_count)
         x = self.attn_norm(h)
 
         xq, xk, xv = self.pre_process_attention(
