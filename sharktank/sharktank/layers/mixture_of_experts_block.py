@@ -127,21 +127,21 @@ class MoeBlock(ThetaLayer):
                 router_weights, self.expert_used_count, dim=-1
             )
 
-        if self.normalize_experts:
-            expert_gate /= expert_gate.sum(dim=-1, keepdim=True)
+        # if self.normalize_experts:
+        #     expert_gate /= expert_gate.sum(dim=-1, keepdim=True)
 
-        expert_gate = expert_gate.to(ffn_input.dtype)
+        # expert_gate = expert_gate.to(ffn_input.dtype)
 
-        if self.route_scale is not None:
-            expert_gate = expert_gate * self.route_scale
+        # if self.route_scale is not None:
+        #     expert_gate = expert_gate * self.route_scale
 
         moe_output = self.routed_experts(ffn_input, top_k_experts, expert_gate)
 
-        if self.shared_experts:
-            moe_output = moe_output + self.shared_experts(ffn_input)
+        # if self.shared_experts:
+        #     moe_output = moe_output + self.shared_experts(ffn_input)
 
         moe_output = moe_output.reshape(batch_size, sequence_length, feature_dim)
 
-        moe_output = self.layer_output_norm(moe_output)
+        # moe_output = self.layer_output_norm(moe_output)
 
         return moe_output
