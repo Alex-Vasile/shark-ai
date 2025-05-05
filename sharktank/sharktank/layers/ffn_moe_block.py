@@ -90,10 +90,8 @@ class DenseFFNMOE(ThetaLayer):
     def __init__(
         self,
         theta: Theta,
-        rms_epsilon: float | None = None,
         is_gated: bool = True,
         activation_fn: Callable[[torch.Tensor], torch.Tensor] = F.silu,
-        activation_dtype: Optional[torch.dtype] = None,
         fake_quant: bool = False,
     ):
         super().__init__(theta)
@@ -107,12 +105,9 @@ class DenseFFNMOE(ThetaLayer):
         )
         self.ffn = FFN(
             ffn_theta,
-            rms_epsilon=rms_epsilon,
             is_gated=is_gated,
             activation_fn=activation_fn,
-            activation_dtype=activation_dtype,
             fake_quant=fake_quant,
-            add_residual=False,
         )
 
     def forward(

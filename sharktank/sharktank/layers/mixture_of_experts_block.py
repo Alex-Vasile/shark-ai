@@ -93,7 +93,8 @@ class MoeBlock(ThetaLayer):
         router_logits = self.ffn_gate_inp(ffn_input)
         router_weights = self.score_experts(router_logits.to(torch.float))
 
-        router_weights = replicate(router_weights, count=self.shard_count)
+        if self.shard_count > 1:
+            router_weights = replicate(router_weights, count=self.shard_count)
         # self.n_expert_groups = None
         # self.n_limited_groups = None
         # Select top k experts from router weights
