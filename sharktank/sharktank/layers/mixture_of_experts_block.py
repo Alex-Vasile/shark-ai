@@ -9,10 +9,9 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 
-from sharktank.types import Theta, ShardedTensor
 from sharktank.layers import *
-
-from sharktank.ops import softmax, topk, zeros_like, replicate
+from sharktank.ops import softmax, replicate, topk, zeros_like
+from sharktank.types import Theta, ShardedTensor
 
 __all__ = [
     "MoeBlock",
@@ -44,6 +43,10 @@ class MoeBlock(ThetaLayer):
         route_scale: Optional[float] = None,
     ):
         super().__init__(theta)
+        if n_expert_groups is not None and expert_count % n_expert_groups != 0:
+            raise ValueError(
+                f"Number of experts {expert_count} must be divisible by the number of expert groups {n_expert_groups}."
+            )
         self.expert_used_count = expert_used_count
         self.expert_count = expert_count
         self.n_expert_groups = n_expert_groups
@@ -99,19 +102,8 @@ class MoeBlock(ThetaLayer):
         # self.n_limited_groups = None
         # Select top k experts from router weights
         if self.n_expert_groups is not None and self.n_limited_groups is not None:
-            # print('moe here 1')
-
             scores_for_choice = router_weights.view(-1, self.expert_count)
 
-            print(
-                type(
-                    router_weights.view(
-                        -1,
-                        self.n_expert_groups,
-                        self.expert_count // self.n_expert_groups,
-                    )
-                )
-            )
             group_scores = (
                 router_weights.view(
                     -1, self.n_expert_groups, self.expert_count // self.n_expert_groups
@@ -134,7 +126,6 @@ class MoeBlock(ThetaLayer):
                 scores_for_choice, k=self.expert_used_count, dim=-1
             )
         else:
-            # print('moe here 2')
             expert_gate, top_k_experts = topk(
                 router_weights, self.expert_used_count, dim=-1
             )
