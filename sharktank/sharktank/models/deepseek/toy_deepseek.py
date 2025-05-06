@@ -21,11 +21,13 @@ parser.add_argument("-o", "--output", default="/tmp/toy_deepseek.irpa")
 
 def generate(seed):
     torch.manual_seed(seed=12345)
-    dtype = torch.float32
-    block_seq_stride = 32
-    max_blocks = 8
 
+    # Constants
+    dtype = torch.float32
     rope_dimension_count = 64
+    block_seq_stride = 32
+
+    max_blocks = 8
     vocabulary_size = 256
     expert_count = 4
     used_experts = 2
@@ -54,8 +56,8 @@ def generate(seed):
             expert_count=expert_count,
             expert_used_count=used_experts,
             expert_shared_count=1,
-            n_expert_groups=8,
-            n_limited_groups=4,
+            n_expert_groups=2,
+            n_limited_groups=2,
             n_dense_layers=3,
             route_scale=2.5,
             rope_scaling_type="yarn",

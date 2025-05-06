@@ -10,7 +10,7 @@ import torch
 
 # TODO: Should be using a base class with the protocol supported.
 from sharktank.models.llm import *
-from sharktank.models.llama.sharding import shard_theta
+from sharktank.types.sharding import shard_theta
 from sharktank.layers import *
 from sharktank.types import *
 from sharktank.utils.load_llm import *
@@ -60,8 +60,6 @@ def main():
 
     print("config", config)
 
-    if config.hp.model_arch == "deepseek2":
-        from sharktank.models.deepseek.sharding import shard_theta
     if config.tensor_parallelism_size > 1:
         dataset.root_theta = shard_theta(dataset.root_theta, config)
 

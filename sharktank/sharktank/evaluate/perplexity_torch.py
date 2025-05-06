@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from typing import Any
 import sys
 import logging
 import time
@@ -13,13 +14,12 @@ from tqdm import tqdm
 import gc
 
 import torch
-from torch.nn import CrossEntropyLoss
 
 from sharktank.layers import *
 from sharktank.types import *
 
 from sharktank.models.llm import *
-from sharktank.models.llama.sharding import shard_theta
+from sharktank.types.sharding import shard_theta
 
 from sharktank.utils import cli
 from sharktank.utils.load_llm import *

@@ -81,17 +81,12 @@ class LlamaHParams:
     @staticmethod
     def from_gguf_props(p: dict[str, Any]):
         name_prefix = p.get("general.architecture", "llama")
-        default_expert_count = 0
-        default_expert_used_count = 0
+
         default_rope_freq_base = 500000.0
         default_rope_dimension_count = 128
-        default_n_expert_groups = 8
+        default_expert_count = 0
+        default_expert_used_count = 0
         defaut_n_dense_layers = 0
-        default_n_limited_groups = 4
-
-        default_qk_rope_head_dim = 64
-        default_qk_nope_head_dim = 128
-        default_v_head_dim = 128
 
         attention_head_count = _int_prop(p, f"{name_prefix}.attention.head_count")
         rope_dimension_count = _optional_int_prop(
@@ -101,6 +96,12 @@ class LlamaHParams:
         attention_softcap = 30.0 if name_prefix == "grok" else None
 
         if name_prefix == "deepseek2":
+            default_n_expert_groups = 8
+            default_n_limited_groups = 4
+            default_qk_rope_head_dim = 64
+            default_qk_nope_head_dim = 128
+            default_v_head_dim = 128
+
             qk_rope_head_dim = _optional_int_prop(
                 p, f"{name_prefix}.attention.qk_rope_head_dim", default_qk_rope_head_dim
             )
@@ -120,7 +121,6 @@ class LlamaHParams:
             n_limited_groups = _optional_int_prop(
                 p, f"{name_prefix}.n_limited_groups", default_n_limited_groups
             )
-
             rope_scaling_type = _str_prop(p, f"{name_prefix}.rope.scaling.type")
             rope_scaling_factor = _float_prop(p, f"{name_prefix}.rope.scaling.factor")
             rope_scaling_original_context_length = _int_prop(
@@ -167,16 +167,16 @@ class LlamaHParams:
             qk_nope_head_dim=qk_nope_head_dim,
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
-            route_scale=route_scale,
-            n_dense_layers=_optional_int_prop(
-                p, f"{name_prefix}.leading_dense_block_count", defaut_n_dense_layers
-            ),
             attention_softcap=attention_softcap,
             expert_count=_optional_int_prop(
                 p, f"{name_prefix}.expert_count", default_expert_count
             ),
             expert_used_count=_optional_int_prop(
                 p, f"{name_prefix}.expert_used_count", default_expert_used_count
+            ),
+            route_scale=route_scale,
+            n_dense_layers=_optional_int_prop(
+                p, f"{name_prefix}.leading_dense_block_count", defaut_n_dense_layers
             ),
             expert_shared_count=expert_shared_count,
             n_expert_groups=n_expert_groups,
@@ -323,9 +323,11 @@ class LlamaModelConfig:
     # If greater than 1, the model will re-wrap all non-sharded tensors as sharded over 1 device.
     pipeline_parallelism_size: int = 1
 
-    # Mapping between a transformer block and the device(s) it is on.
-    # None for no pipeline parallelism. If not none, must also account for sharding.
-    block_to_device_lookup: tuple[tuple[int, ...], ...] = None
+    # Mapping between a transformer block and the corresponding pipeline
+    block_to_pipeline_map: tuple[int, ...] = None
+
+    # Mapping between a pipeline and the corresponding devices
+    pipeline_to_device_map: tuple[tuple[int, ...], ...] = None
 
     # Which attention kernel to use.
     attention_kernel: str = "torch"
@@ -342,16 +344,6 @@ class LlamaModelConfig:
     # be the difference of many gigabytes of static data being embedded in
     # the program and not.
     static_tables: bool = True
-
-    def __post_init__(self):
-        if not self.block_to_device_lookup:
-            assert (
-                self.pipeline_parallelism_size == 1
-            ), "Must specify block_to_device_lookup if pipeline parallelism is used"
-            self.block_to_device_lookup = tuple(
-                tuple(range(self.tensor_parallelism_size))
-                for _ in range(self.hp.block_count)
-            )
 
 
 @dataclass

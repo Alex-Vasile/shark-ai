@@ -11,14 +11,11 @@ import torch
 
 from sharktank.layers.paged_llama_attention_block import PagedLlamaAttentionBlock
 from sharktank.layers.rotary_embedding import RotaryEmbeddingLayer
-from sharktank.models.deepseek.sharding import (
-    flat_to_nested_dict,
-    shard_theta,
-    LatentAttentionBlockSharding,
-)
+
 from sharktank.models.deepseek.toy_deepseek import generate
+from sharktank.types.theta import Theta, flat_to_nested_dict
+from sharktank.types.sharding import shard_theta, LatentAttentionBlockSharding
 from sharktank import ops
-from sharktank.types.theta import Theta
 
 
 class DeepseekShardedTest(unittest.TestCase):
@@ -93,10 +90,3 @@ class DeepseekShardedTest(unittest.TestCase):
         )
         sharded = ops.unshard(sharded)
         assert torch.isclose(reference, sharded, atol=1e-5).all()
-
-
-# def main():
-#     DeepseekShardedTest().test_deepseek()
-
-# if __name__ == "__main__":
-#     main()

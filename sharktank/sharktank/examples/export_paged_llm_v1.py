@@ -72,19 +72,19 @@ def main():
             )
 
     if args.pipeline_parallelism_size > 1:
-        block_to_device_lookup = pipeline_parallelize_theta(
+        block_to_pipeline, pipeline_to_devices = pipeline_parallelize_theta(
             dataset.root_theta, args.pipeline_parallelism_size
         )
     else:
-        block_to_device_lookup = tuple(
-            tuple(range(args.tensor_parallelism_size)) for _ in range(hp.block_count)
-        )
+        block_to_pipeline = tuple([0] * hp.block_count)
+        pipeline_to_devices = tuple([tuple(range(args.tensor_parallelism_size))])
 
     llama_config = LlamaModelConfig(
         hp,
         tensor_parallelism_size=args.tensor_parallelism_size,
         pipeline_parallelism_size=args.pipeline_parallelism_size,
-        block_to_device_lookup=block_to_device_lookup,
+        block_to_pipeline_map=block_to_pipeline,
+        pipeline_to_device_map=pipeline_to_devices,
         use_hf=args.use_hf,
         static_tables=False,  # Rely on the compiler for hoisting tables.
         attention_kernel=args.attention_kernel,
@@ -175,7 +175,7 @@ def main():
                     for tp in range(llama_config.tensor_parallelism_size):
                         i = pipeline * llama_config.tensor_parallelism_size + tp
                         arg_affinities[i] = DeviceAffinity(
-                            str(model.cache.pipeline_to_device_lookup[pipeline][tp])
+                            str(model.cache.pipeline_to_devices[pipeline][tp])
                         )
 
             return unpacked, shard_dim, dynamic_shapes, arg_affinities
@@ -225,7 +225,8 @@ def main():
             arg_affinities = {key + 3: arg_affinities[key] for key in arg_affinities}
 
             for i in range(3):
-                arg_affinities[i] = DeviceAffinity(str(block_to_device_lookup[0][0]))
+                device = str(pipeline_to_devices[0])
+                arg_affinities[i] = DeviceAffinity(device)
 
         dynamic_shapes = {
             "tokens": {1: sl_dim},
@@ -264,7 +265,7 @@ def main():
                 tokens = ops.replicate(
                     tokens,
                     count=shard_count,
-                    devices=llama_config.block_to_device_lookup[0],
+                    devices=llama_config.pipeline_to_devices[0],
                 )
                 if attention_mask is None:
                     attention_mask = [None] * model.cache.pipeline_count
@@ -337,7 +338,7 @@ def main():
 
             # Inputs have default affinity 0
             for i in range(4):
-                arg_affinities[i] = DeviceAffinity(str(block_to_device_lookup[0][0]))
+                arg_affinities[i] = DeviceAffinity(str(pipeline_to_devices[0][0]))
 
         dynamic_shapes = {
             "tokens": {},
@@ -388,7 +389,7 @@ def main():
                 tokens = ops.replicate(
                     tokens,
                     count=shard_count,
-                    devices=llama_config.block_to_device_lookup[0],
+                    devices=llama_config.pipeline_to_devices[0],
                 )
                 _attention_mask, _start_positions, _seq_block_ids = [], [], []
                 for pipeline in range(model.cache.pipeline_count):
@@ -436,11 +437,17 @@ def main():
             return logits
 
     def generate_argmax():
+        # TODO: Remove this when the corresponding `dtype` conversion is
+        # removed in `PagedLlmModelV1.prefill/decode`
+        dtype = llama_config.activation_dtype
+        if "float8" in str(dtype) or dtype == torch.bfloat16:
+            dtype = torch.float16
+
         logits: torch.Tensor = torch.empty(
             1,
             1,
             hp.context_length,
-            dtype=llama_config.activation_dtype,
+            dtype=dtype,
         )
 
         arg_affinities = [DeviceAffinity("0")]
@@ -457,7 +464,7 @@ def main():
             logits=logits,
             axis=-1,
         ):
-            return ops.argmax(logits, axis)
+            return ops.argmax(logits, axis, chunk_size=hp.context_length // 1024)
 
     if not args.skip_prefill:
         for bs in args.bs_prefill:
