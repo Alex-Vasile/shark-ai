@@ -212,9 +212,15 @@ class SharedExpertsSharding(ThetaLayerSharding):
     def theta_sharding(self) -> ThetaSharding:
         return ThetaSharding(
             {
-                "shared_experts": FFNSharding(
+                "ffn_gate_shexp": LinearSplitParallelWeightAndBiasSharding(
                     shard_count=self.shard_count
-                ).theta_sharding()
+                ).theta_sharding(),
+                "ffn_up_shexp": LinearSplitParallelWeightAndBiasSharding(
+                    shard_count=self.shard_count
+                ).theta_sharding(),
+                "ffn_down_shexp": LinearSplitReductionDimSharding(
+                    shard_count=self.shard_count
+                ).theta_sharding(),
             }
         )
 
@@ -284,12 +290,14 @@ class LatentAttentionBlockSharding(ThetaLayerSharding):
                 ).theta_sharding(),
                 "attn_q_b": LinearSplitReductionDimSharding(
                     shard_count=self.shard_count,
+                    reduction_dim=1,
                 ).theta_sharding(),
-                "attn_kv_a_mqa": LinearSplitParallelWeightAndBiasSharding(
+                "attn_kv_a_mqa": LinearReplicatedWeightAndBiasSharding(
                     shard_count=self.shard_count
                 ).theta_sharding(),
                 "attn_kv_b": LinearSplitReductionDimSharding(
                     shard_count=self.shard_count,
+                    reduction_dim=1,
                 ).theta_sharding(),
                 "attn_output": LinearSplitReductionDimSharding(
                     shard_count=self.shard_count

@@ -117,10 +117,8 @@ class LlamaHParams:
             q_lora_rank = _int_prop(p, f"{name_prefix}.attention.q_lora_rank")
             kv_lora_rank = _int_prop(p, f"{name_prefix}.attention.kv_lora_rank")
             route_scale = _float_prop(p, f"{name_prefix}.expert_weights_scale")
-            n_dense_layers = (
-                _optional_int_prop(
-                    p, f"{name_prefix}.leading_dense_block_count", defaut_n_dense_layers
-                ),
+            n_dense_layers = _optional_int_prop(
+                p, f"{name_prefix}.leading_dense_block_count", defaut_n_dense_layers
             )
             expert_shared_count = _int_prop(p, f"{name_prefix}.expert_shared_count")
             n_expert_groups = _optional_int_prop(
