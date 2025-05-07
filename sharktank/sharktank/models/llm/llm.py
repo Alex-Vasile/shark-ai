@@ -414,6 +414,6 @@ class AttentionFFNBlock(ThetaLayer):
         final_output = self.ffn(self.ffn_norm(h))
 
         if self.add_residual:
-            final_output += h
+            final_output = h + final_output
 
         return final_output
