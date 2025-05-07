@@ -155,7 +155,6 @@ def main():
         attention_layer_norm_rms_epsilon=9.999999747378752e-06,
         attention_head_count_kv=32,
         model_arch="llama",
-        n_dense_layers=0,
     )
 
     llama_config = LlamaModelConfig(hp)

@@ -49,8 +49,6 @@ def make_deepseek_attention_block(
     else:
         ffn_theta = make_ffn_block_theta(
             block_idx=block_idx,
-            head_count=head_count,
-            head_dim=head_dim,
             embedding_length=embedding_length,
             feed_forward_length=feed_forward_length,
             dtype=dtype,

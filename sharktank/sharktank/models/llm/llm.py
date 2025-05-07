@@ -298,7 +298,6 @@ class AttentionFFNBlock(ThetaLayer):
     ):
         super().__init__(theta)
 
-        # print('block_index', block_index)
         attention_kernel = (
             "decomposed" if config.hp.model_arch == "grok" else config.attention_kernel
         )
@@ -347,7 +346,7 @@ class AttentionFFNBlock(ThetaLayer):
             "deepseek2": (
                 ops.sigmoid,
                 torch.nn.functional.silu,
-                False,
+                True,
                 True,
             ),
         }
@@ -359,7 +358,9 @@ class AttentionFFNBlock(ThetaLayer):
             normalize_experts,
         ) = moe_func_map[config.hp.model_arch]
 
-        if block_index >= config.hp.n_dense_layers:
+        n_dense_layers = config.hp.n_dense_layers
+
+        if n_dense_layers is not None and block_index >= n_dense_layers:
             self.add_module(
                 "ffn",
                 MoeBlock(

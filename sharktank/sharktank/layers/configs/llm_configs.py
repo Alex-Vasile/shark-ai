@@ -92,6 +92,9 @@ class LlamaHParams:
         rope_dimension_count = _optional_int_prop(
             p, f"{name_prefix}.rope.dimension_count", default_rope_dimension_count
         )
+        expert_count = _optional_int_prop(
+            p, f"{name_prefix}.expert_count", default_expert_count
+        )
 
         attention_softcap = 30.0 if name_prefix == "grok" else None
 
@@ -114,6 +117,11 @@ class LlamaHParams:
             q_lora_rank = _int_prop(p, f"{name_prefix}.attention.q_lora_rank")
             kv_lora_rank = _int_prop(p, f"{name_prefix}.attention.kv_lora_rank")
             route_scale = _float_prop(p, f"{name_prefix}.expert_weights_scale")
+            n_dense_layers = (
+                _optional_int_prop(
+                    p, f"{name_prefix}.leading_dense_block_count", defaut_n_dense_layers
+                ),
+            )
             expert_shared_count = _int_prop(p, f"{name_prefix}.expert_shared_count")
             n_expert_groups = _optional_int_prop(
                 p, f"{name_prefix}.n_expert_groups", default_n_expert_groups
@@ -129,7 +137,6 @@ class LlamaHParams:
             rope_scaling_yarn_log_multiplier = _float_prop(
                 p, f"{name_prefix}.rope.scaling.yarn_log_multiplier"
             )
-
             attn_head_dim = qk_nope_head_dim + qk_rope_head_dim
         else:
             attn_head_dim = rope_dimension_count
@@ -147,6 +154,7 @@ class LlamaHParams:
             rope_scaling_factor = None
             rope_scaling_original_context_length = None
             rope_scaling_yarn_log_multiplier = None
+            n_dense_layers = defaut_n_dense_layers if expert_count > 0 else None
 
         return LlamaHParams(
             model_arch=name_prefix,
@@ -168,16 +176,12 @@ class LlamaHParams:
             qk_rope_head_dim=qk_rope_head_dim,
             v_head_dim=v_head_dim,
             attention_softcap=attention_softcap,
-            expert_count=_optional_int_prop(
-                p, f"{name_prefix}.expert_count", default_expert_count
-            ),
+            expert_count=expert_count,
             expert_used_count=_optional_int_prop(
                 p, f"{name_prefix}.expert_used_count", default_expert_used_count
             ),
             route_scale=route_scale,
-            n_dense_layers=_optional_int_prop(
-                p, f"{name_prefix}.leading_dense_block_count", defaut_n_dense_layers
-            ),
+            n_dense_layers=n_dense_layers,
             expert_shared_count=expert_shared_count,
             n_expert_groups=n_expert_groups,
             n_limited_groups=n_limited_groups,

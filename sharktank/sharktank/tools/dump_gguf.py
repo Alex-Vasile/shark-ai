@@ -39,11 +39,6 @@ def main():
         action="store_true",
         help="Save input and output tensors",
     )
-    parser.add_argument(
-        "--log-tensors",
-        action="store_true",
-        help="Print tensor name and shape for all or num_blocks",
-    )
 
     cli.add_input_dataset_options(parser)
     cli.add_log_options(parser)
@@ -74,15 +69,13 @@ def main():
             save = True
 
         # Save input/output layer tensors
-        if "blk" not in tensor.name and (
-            args.save_input_output_blocks or args.log_tensors
-        ):
+        if "blk" not in tensor.name and args.save_input_output_blocks:
             save = True
         elif int(tensor.name.split(".")[1]) in num_blocks:
             # Save tensors if in num_blocks
             save = True
 
-        if save and args.log_tensors:
+        if save:
             logger.info(f"  {tensor.name}: {tensor.shape}")
             tensors += [
                 DefaultPrimitiveTensor(data=tensor.as_torch(), name=tensor.name)

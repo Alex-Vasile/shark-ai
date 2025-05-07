@@ -43,7 +43,6 @@ def generate(seed):
             expert_count=0,
             expert_used_count=0,
             model_arch="llama",
-            n_dense_layers=0,
         ),
         block_seq_stride=block_seq_stride,
         activation_dtype=dtype,

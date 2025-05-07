@@ -104,7 +104,7 @@ class PerplexityTorch:
 
     def assemble_batch(self, token_batch: torch.tensor) -> torch.tensor:
 
-        token_batch, seq_lens_batch = self.generator.tokenizer.pad_tokens(
+        token_batch, seq_lens_batch = pad_tokens(
             token_ids=token_batch.tolist(),
             pad_to_multiple_of=self.generator.model.cache.pad_sequence_stride,
         )

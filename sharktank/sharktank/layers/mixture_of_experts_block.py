@@ -10,8 +10,8 @@ import torch
 import torch.nn.functional as F
 
 from sharktank.layers import *
-from sharktank.ops import softmax, replicate, topk, zeros_like
-from sharktank.types import Theta, ShardedTensor
+from sharktank.ops import softmax, topk, zeros_like, reshard_like
+from sharktank.types import ShardedTensor, Theta
 
 __all__ = [
     "MoeBlock",
@@ -43,10 +43,22 @@ class MoeBlock(ThetaLayer):
         route_scale: Optional[float] = None,
     ):
         super().__init__(theta)
-        if n_expert_groups is not None and expert_count % n_expert_groups != 0:
-            raise ValueError(
-                f"Number of experts {expert_count} must be divisible by the number of expert groups {n_expert_groups}."
-            )
+        if n_expert_groups is not None:
+            if expert_count % n_expert_groups != 0:
+                raise ValueError(
+                    (
+                        f"Number of experts {expert_count} must be divisible by the "
+                        f"number of expert groups {n_expert_groups}."
+                    )
+                )
+            n_experts_per_group = expert_count // n_expert_groups
+            if n_experts_per_group < n_limited_groups:
+                raise ValueError(
+                    (
+                        f"Number of limited expert groups {n_limited_groups} must be at "
+                        f"most the number of experts per group {n_experts_per_group}."
+                    )
+                )
         self.expert_used_count = expert_used_count
         self.expert_count = expert_count
         self.n_expert_groups = n_expert_groups
@@ -96,10 +108,8 @@ class MoeBlock(ThetaLayer):
         router_logits = self.ffn_gate_inp(ffn_input)
         router_weights = self.score_experts(router_logits.to(torch.float))
 
-        if self.shard_count > 1:
-            router_weights = replicate(router_weights, count=self.shard_count)
-        # self.n_expert_groups = None
-        # self.n_limited_groups = None
+        router_weights = reshard_like(router_weights, like=ffn_input)
+
         # Select top k experts from router weights
         if self.n_expert_groups is not None and self.n_limited_groups is not None:
             scores_for_choice = router_weights.view(-1, self.expert_count)

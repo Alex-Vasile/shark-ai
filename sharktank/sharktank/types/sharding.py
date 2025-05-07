@@ -106,10 +106,6 @@ class AttentionFFNBlockSharding(ThetaLayerSharding):
         if self.model_arch == "llama":
             result = PagedLlamaAttentionBlockSharding(self.shard_count).theta_sharding()
             result.update(FFNSharding(self.shard_count).theta_sharding())
-        elif self.model_arch == "deepseek2":
-            result = LatentAttentionBlockSharding(self.shard_count).theta_sharding()
-            result.update(FFNSharding(self.shard_count).theta_sharding())
-            result.update(SharedExpertsSharding(self.shard_count).theta_sharding())
             result.update(
                 {
                     # The size of this is the token embedding length, which is not a memory
@@ -119,7 +115,19 @@ class AttentionFFNBlockSharding(ThetaLayerSharding):
                     ).theta_sharding()
                 }
             )
-            result.update(RoutedExpertsSharding(self.shard_count).theta_sharding())
+        elif self.model_arch == "deepseek2":
+            result = LatentAttentionBlockSharding(self.shard_count).theta_sharding()
+            result.update(FFNSharding(self.shard_count).theta_sharding())
+            result.update(
+                {
+                    # The size of this is the token embedding length, which is not a memory
+                    # space concern if replicated.
+                    "ffn_norm": RmsNormReplicatedSharding(
+                        self.shard_count
+                    ).theta_sharding()
+                }
+            )
+            result.update(MoeBlockSharding(self.shard_count).theta_sharding())
         elif self.model_arch == "grok":
             result = PagedLlamaAttentionBlockSharding(self.shard_count).theta_sharding()
             result.update(
@@ -131,7 +139,7 @@ class AttentionFFNBlockSharding(ThetaLayerSharding):
                     ).theta_sharding()
                 }
             )
-            result.update(RoutedExpertsSharding(self.shard_count).theta_sharding())
+            result.update(MoeBlockSharding(self.shard_count).theta_sharding())
         return result
 
 
@@ -168,6 +176,70 @@ class FFNSharding(ThetaLayerSharding):
                 ).theta_sharding(),
             }
         )
+
+
+class ExpertParallelRoutedExpertsSharding(ThetaLayerSharding):
+    def __init__(self, shard_count: int):
+        super().__init__()
+        self.shard_count = shard_count
+
+    def theta_sharding(self) -> ThetaSharding:
+        return ThetaSharding(
+            {
+                "ffn_gate_exps": LinearSplitBatchWeightAndBiasSharding(
+                    shard_count=self.shard_count,
+                ).theta_sharding(),
+                "ffn_up_exps": LinearSplitBatchWeightAndBiasSharding(
+                    shard_count=self.shard_count,
+                ).theta_sharding(),
+                "ffn_down_exps": LinearSplitBatchWeightAndBiasSharding(
+                    shard_count=self.shard_count
+                ).theta_sharding(),
+                "exp_probs_b": Ignore(),
+            }
+        )
+
+
+class SharedExpertsSharding(ThetaLayerSharding):
+    def __init__(self, shard_count: int):
+        super().__init__()
+        self.shard_count = shard_count
+
+    def theta_sharding(self) -> ThetaSharding:
+        return ThetaSharding(
+            {
+                "shared_experts": FFNSharding(
+                    shard_count=self.shard_count
+                ).theta_sharding()
+            }
+        )
+
+
+class MoeBlockSharding(ThetaLayerSharding):
+    def __init__(self, shard_count: int):
+        super().__init__()
+        self.shard_count = shard_count
+
+    def theta_sharding(self) -> ThetaSharding:
+        result = ThetaSharding(
+            {
+                "ffn_gate_inp": LinearSplitParallelWeightAndBiasSharding(
+                    shard_count=self.shard_count
+                ).theta_sharding(),
+            }
+        )
+        result.update(SharedExpertsSharding(self.shard_count).theta_sharding())
+        result.update(
+            ExpertParallelRoutedExpertsSharding(self.shard_count).theta_sharding()
+        )
+        result.update(
+            {
+                "layer_output_norm": RmsNormReplicatedSharding(
+                    shard_count=self.shard_count
+                ).theta_sharding(),
+            }
+        )
+        return result
 
 
 class GroupNormSplitChannelSharding(ThetaLayerSharding):
@@ -256,6 +328,17 @@ class LinearSplitParallelWeightAndBiasSharding(LinearLayerSharding):
         """Split one parallel dimension for both the weight and bias.
         Since the weight is transposed before multiplying, the weight parallel
         dimension is the same as the output(bias) dimension."""
+        super().__init__(
+            premul_input=Replicated(shard_count=shard_count),
+            weight=Split(shard_count=shard_count, shard_dim=weight_and_bias_spit_dim),
+            bias=Split(shard_count=shard_count, shard_dim=weight_and_bias_spit_dim),
+        )
+
+
+class LinearSplitBatchWeightAndBiasSharding(LinearLayerSharding):
+    def __init__(self, shard_count: int, weight_and_bias_spit_dim: int = 0):
+        """Split one batch dimension for both the weight and bias.
+        Since the weight is transposed before multiplying."""
         super().__init__(
             premul_input=Replicated(shard_count=shard_count),
             weight=Split(shard_count=shard_count, shard_dim=weight_and_bias_spit_dim),
@@ -356,53 +439,6 @@ class RmsNormReplicatedSharding(ThetaLayerSharding):
         return ThetaSharding(
             {
                 "weight": Replicated(shard_count=self.shard_count),
-            }
-        )
-
-
-class RoutedExpertsSharding(ThetaLayerSharding):
-    def __init__(self, shard_count: int):
-        super().__init__()
-        self.shard_count = shard_count
-
-    def theta_sharding(self) -> ThetaSharding:
-        return ThetaSharding(
-            {
-                "ffn_gate_inp": LinearSplitParallelWeightAndBiasSharding(
-                    shard_count=self.shard_count
-                ).theta_sharding(),
-                "ffn_gate_exps": LinearSplitParallelWeightAndBiasSharding(
-                    shard_count=self.shard_count,
-                    weight_and_bias_spit_dim=1,
-                ).theta_sharding(),
-                "ffn_up_exps": LinearSplitReductionDimSharding(
-                    shard_count=self.shard_count,
-                ).theta_sharding(),
-                "ffn_down_exps": LinearSplitReductionDimSharding(
-                    shard_count=self.shard_count, reduction_dim=2
-                ).theta_sharding(),
-                "exp_probs_b": Ignore(),
-            }
-        )
-
-
-class SharedExpertsSharding(ThetaLayerSharding):
-    def __init__(self, shard_count: int):
-        super().__init__()
-        self.shard_count = shard_count
-
-    def theta_sharding(self) -> ThetaSharding:
-        return ThetaSharding(
-            {
-                "ffn_gate_shexp": LinearSplitParallelWeightAndBiasSharding(
-                    shard_count=self.shard_count
-                ).theta_sharding(),
-                "ffn_up_shexp": LinearSplitParallelWeightAndBiasSharding(
-                    shard_count=self.shard_count
-                ).theta_sharding(),
-                "ffn_down_shexp": LinearSplitReductionDimSharding(
-                    shard_count=self.shard_count
-                ).theta_sharding(),
             }
         )
 

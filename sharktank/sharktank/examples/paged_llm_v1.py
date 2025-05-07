@@ -58,8 +58,6 @@ def main():
         fake_quant=args.fake_quant,
     )
 
-    print("config", config)
-
     if config.tensor_parallelism_size > 1:
         dataset.root_theta = shard_theta(dataset.root_theta, config)
 

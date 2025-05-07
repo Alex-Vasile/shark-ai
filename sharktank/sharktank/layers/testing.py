@@ -115,8 +115,6 @@ def make_latent_attention_block_theta(
 def make_ffn_block_theta(
     *,
     block_idx: int,
-    head_count: int,
-    head_dim: int,
     embedding_length: int,
     feed_forward_length: int,
     dtype: torch.dtype | None = None,
