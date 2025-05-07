@@ -7,11 +7,15 @@
 """Specifications describing how a tensor, ops, layers and blocks are
 sharded."""
 
+from typing import TYPE_CHECKING
+
 from abc import ABC, abstractmethod
 from sharktank.utils import tree
 from sharktank.types.theta import Theta, flat_to_nested_dict
-from sharktank.layers.configs import LlamaModelConfig
 from sharktank import ops
+
+if TYPE_CHECKING:
+    from sharktank.layers.configs import LlamaModelConfig
 
 
 class Sharding(ABC):
@@ -456,7 +460,7 @@ class TokenEmbeddingLayerReplicatedSharding(ThetaLayerSharding):
         )
 
 
-def shard_theta(theta: Theta, config: LlamaModelConfig) -> Theta:
+def shard_theta(theta: Theta, config: "LlamaModelConfig") -> Theta:
     return ops.reshard(
         theta,
         LlamaSharding(
