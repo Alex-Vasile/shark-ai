@@ -59,7 +59,7 @@ def make_deepseek_attention_block(
 
 
 def make_moe_block_theta(
-    block_idx=0, inter_dim=16, ffn_dim=32, num_experts=4, shared_experts=1
+    block_idx=0, expert_hidden_dim=16, ffn_dim=32, num_experts=4, shared_experts=1
 ) -> Theta:
     return Theta(
         {
@@ -73,28 +73,28 @@ def make_moe_block_theta(
             ),
             f"ffn_gate_exps.weight": DefaultPrimitiveTensor(
                 name=f"blk.{block_idx}.ffn_gate_exps.weight",
-                data=make_rand_torch((num_experts, inter_dim, ffn_dim)),
+                data=make_rand_torch((num_experts, expert_hidden_dim, ffn_dim)),
             ),
             f"ffn_up_exps.weight": DefaultPrimitiveTensor(
                 name=f"blk.{block_idx}.ffn_up_exps.weight",
-                data=make_rand_torch((num_experts, inter_dim, ffn_dim)),
+                data=make_rand_torch((num_experts, expert_hidden_dim, ffn_dim)),
             ),
             f"ffn_down_exps.weight": DefaultPrimitiveTensor(
                 name=f"blk.{block_idx}.ffn_down_exps.weight",
-                data=make_rand_torch((num_experts, ffn_dim, inter_dim)),
+                data=make_rand_torch((num_experts, ffn_dim, expert_hidden_dim)),
             ),
             # Shared experts tensors
             f"ffn_gate_shexp.weight": DefaultPrimitiveTensor(
                 name=f"blk.{block_idx}.ffn_gate_shexp.weight",
-                data=make_rand_torch((shared_experts * inter_dim, ffn_dim)),
+                data=make_rand_torch((shared_experts * expert_hidden_dim, ffn_dim)),
             ),
             f"ffn_up_shexp.weight": DefaultPrimitiveTensor(
                 name=f"blk.{block_idx}.ffn_up_shexp.weight",
-                data=make_rand_torch((shared_experts * inter_dim, ffn_dim)),
+                data=make_rand_torch((shared_experts * expert_hidden_dim, ffn_dim)),
             ),
             f"ffn_down_shexp.weight": DefaultPrimitiveTensor(
                 name=f"blk.{block_idx}.ffn_down_shexp.weight",
-                data=make_rand_torch((ffn_dim, shared_experts * inter_dim)),
+                data=make_rand_torch((ffn_dim, shared_experts * expert_hidden_dim)),
             ),
         }
     )

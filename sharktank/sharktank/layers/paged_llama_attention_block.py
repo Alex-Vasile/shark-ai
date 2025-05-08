@@ -150,7 +150,7 @@ class PagedLlamaAttentionBlock(ThetaLayer):
                 q = self.wq(x).unflatten(2, (self.head_count, -1))
             else:
                 q = self.wq_b(self.q_norm(self.wq_a(x)))
-                if isinstance(q, SplitPrimitiveTensor):
+                if isinstance(q, ShardedTensor) and not isinstance(q, ReplicatedTensor):
                     q = ops.replicate(q, count=self.shard_count)
                 q = q.unflatten(2, (self.head_count, -1))
 
@@ -179,7 +179,9 @@ class PagedLlamaAttentionBlock(ThetaLayer):
             ##TODO: Restructure this to apply the wkv_b post attention instead of here
             kv_norm = self.kv_norm(kv_nope)
             wkv_b = self.wkv_b(kv_norm)
-            if isinstance(wkv_b, SplitPrimitiveTensor):
+            if isinstance(wkv_b, ShardedTensor) and not isinstance(
+                wkv_b, ReplicatedTensor
+            ):
                 wkv_b = ops.replicate(wkv_b, count=self.shard_count)
             wkv_b = wkv_b.unflatten(2, (self.head_count, -1))
 

@@ -12,14 +12,14 @@ and dims floating around everywhere.
 """
 
 from itertools import accumulate
-from typing import Optional, Tuple, Union, List
+from typing import Optional, Union, List
 
-import abc
 import math
 
 import torch
 
 from sharktank.types import (
+    ShardedTensor,
     SplitPrimitiveTensor,
     ReplicatedTensor,
     QuantizerTensor,
@@ -361,6 +361,10 @@ class PagedAttention:
             index = index * self.block_seq_stride + page_offset
 
             values = ops.to(cache_partition, dtype=page_table.dtype)
+
+            if isinstance(values, ShardedTensor) and type(values) != type(page_table):
+                values = ops.reshard_like(values, like=page_table)
+
             if page_table.dtype == torch.float8_e4m3fnuz:
                 # Workaround for Torch not supporting torch.Tensor.index_copy_ for f8.
                 page_table_as_int8 = page_table.view(dtype=torch.int8)
@@ -474,6 +478,12 @@ class PagedAttention:
         v = ops.to(v, dtype=self.attn_dtype)
         if mask is not None:
             mask = ops.to(mask, dtype=self.attn_dtype)
+
+        if isinstance(k, ShardedTensor) and type(k) != type(q):
+            k = ops.reshard_like(k, like=q)
+
+        if isinstance(v, ShardedTensor) and type(v) != type(q):
+            v = ops.reshard_like(v, like=q)
 
         if attention_kernel == "decomposed":
             if isinstance(q, PlanarQuantizedTensor):
