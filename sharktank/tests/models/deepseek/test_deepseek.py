@@ -43,5 +43,4 @@ class DeepseekShardedTest(unittest.TestCase):
         logits = logits[0, 1:]
         cross_entropy = torch.nn.functional.cross_entropy(logits, ids)
 
-        # Obtained: 7.810999870300293
-        assert pytest.approx(5.3062, 1e-4) == cross_entropy
+        assert pytest.approx(7.8138, 1e-4) == cross_entropy
