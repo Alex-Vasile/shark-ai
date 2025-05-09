@@ -120,9 +120,9 @@ class MoeBlock(ThetaLayer):
                 ).sum(dim=-1)
                 # .topk(2, dim=-1)[0]  # TODO: REVERT ME.
             )
-            group_idx = topk(group_scores, k=self.n_limited_groups, dim=-1)[1]
-            group_mask = zeros_like(group_scores)
-            group_mask.scatter_(1, group_idx, 1)
+            # group_idx = topk(group_scores, k=self.n_limited_groups, dim=-1)[1]
+            group_mask = 1 + zeros_like(group_scores)
+            # group_mask.scatter_(1, group_idx, 1)
             score_mask = (
                 group_mask.unsqueeze(-1)
                 .expand(
@@ -131,10 +131,17 @@ class MoeBlock(ThetaLayer):
                 .reshape(-1, self.expert_count)
             )
             scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)
-            expert_gate, top_k_experts = topk(
-                scores_for_choice, k=self.expert_used_count, dim=-1
+            top_k_experts = (
+                torch.arange(self.expert_used_count)
+                .unsqueeze(0)
+                .expand(scores_for_choice.shape[0], -1)
             )
+            expert_gate = scores_for_choice[..., : self.expert_used_count]
+            # expert_gate, top_k_experts = topk(  # TODO: REVERT ME.
+            #     scores_for_choice, k=self.expert_used_count, dim=-1
+            # )
         else:
+            assert False
             expert_gate, top_k_experts = topk(
                 router_weights, self.expert_used_count, dim=-1
             )
