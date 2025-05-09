@@ -97,15 +97,19 @@ class PagedLlamaAttentionBlock(ThetaLayer):
                 "kv_norm", RMSNormLayer(theta("attn_kv_a_norm"), epsilon=rms_epsilon)
             )
             if "q" in theta:
-                self.wq = LinearLayer(theta("q"))
+                self.wq = LinearLayer(theta("q"), fake_quant=self.fake_quant)
             else:
                 self.wq = None
-                self.wq_a = LinearLayer(theta("attn_q_a"))
-                self.wq_b = LinearLayer(theta("attn_q_b"))
+                self.wq_a = LinearLayer(theta("attn_q_a"), fake_quant=self.fake_quant)
+                self.wq_b = LinearLayer(theta("attn_q_b"), fake_quant=self.fake_quant)
                 self.q_norm = RMSNormLayer(theta("attn_q_a_norm"), epsilon=rms_epsilon)
 
-            self.add_module("wkv_a", LinearLayer(theta("attn_kv_a_mqa")))
-            self.add_module("wkv_b", LinearLayer(theta("attn_kv_b")))
+            self.add_module(
+                "wkv_a", LinearLayer(theta("attn_kv_a_mqa"), fake_quant=self.fake_quant)
+            )
+            self.add_module(
+                "wkv_b", LinearLayer(theta("attn_kv_b"), fake_quant=self.fake_quant)
+            )
 
         self.add_module(
             "attn_norm", RMSNormLayer(theta("attn_norm"), epsilon=rms_epsilon)
