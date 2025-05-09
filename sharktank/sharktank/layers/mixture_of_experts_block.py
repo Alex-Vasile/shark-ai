@@ -117,9 +117,8 @@ class MoeBlock(ThetaLayer):
             group_scores = (
                 router_weights.view(
                     -1, self.n_expert_groups, self.expert_count // self.n_expert_groups
-                )
-                .topk(2, dim=-1)[0]
-                .sum(dim=-1)
+                ).sum(dim=-1)
+                # .topk(2, dim=-1)[0]  # TODO: REVERT ME.
             )
             group_idx = topk(group_scores, k=self.n_limited_groups, dim=-1)[1]
             group_mask = zeros_like(group_scores)
