@@ -164,7 +164,7 @@ class DenseFFNMOE(ThetaLayer):
 
         # (num_tokens, input_feature_dim)
         return routed_out[: h.shape[0] :, ...]
-        ops.zeros_like(h).scatter_add(dim=0, index=router_indices, src=routed_out)
+        # return ops.zeros_like(h).scatter_add(dim=0, index=router_indices, src=routed_out)
 
 
 class SparseFFNMOE(ThetaLayer):
