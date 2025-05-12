@@ -59,17 +59,17 @@ class PPFFN(ThetaLayer):
         self.pipeline_to_devices = pipeline_to_devices
 
     def _inter_layer_callback(self, x: ShardedTensor, curr_block: int):
-        if self.config.block_to_pipeline_map is None:
+        if self.block_to_pipeline_map is None:
             return x
 
-        if curr_block >= len(self.config.block_to_pipeline_map) - 1:
+        if curr_block >= len(self.block_to_pipeline_map) - 1:
             return x
 
-        pipeline_0 = self.config.block_to_pipeline_map[curr_block]
-        pipeline_1 = self.config.block_to_pipeline_map[curr_block + 1]
+        pipeline_0 = self.block_to_pipeline_map[curr_block]
+        pipeline_1 = self.block_to_pipeline_map[curr_block + 1]
 
-        curr_devices = self.config.pipeline_to_device_map[pipeline_0]
-        next_devices = self.config.pipeline_to_device_map[pipeline_1]
+        curr_devices = self.pipeline_to_device_map[pipeline_0]
+        next_devices = self.pipeline_to_device_map[pipeline_1]
 
         if all(d_curr == d_next for d_curr, d_next in zip(curr_devices, next_devices)):
             return x
