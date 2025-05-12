@@ -7,7 +7,7 @@
 """Specifications describing how a tensor, ops, layers and blocks are
 sharded."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from abc import ABC, abstractmethod
 from sharktank.utils import tree
@@ -285,19 +285,17 @@ class LatentAttentionBlockSharding(ThetaLayerSharding):
                 "attn_kv_a_norm": RmsNormReplicatedSharding(
                     self.shard_count
                 ).theta_sharding(),
-                "attn_q_a": LinearReplicatedWeightAndBiasSharding(
+                "attn_q_a": LinearSplitParallelWeightAndBiasSharding(
                     shard_count=self.shard_count
                 ).theta_sharding(),
                 "attn_q_b": LinearSplitReductionDimSharding(
                     shard_count=self.shard_count,
-                    reduction_dim=1,
                 ).theta_sharding(),
-                "attn_kv_a_mqa": LinearReplicatedWeightAndBiasSharding(
+                "attn_kv_a_mqa": LinearSplitParallelWeightAndBiasSharding(
                     shard_count=self.shard_count
                 ).theta_sharding(),
-                "attn_kv_b": LinearSplitReductionDimSharding(
+                "attn_kv_b": LinearSplitParallelWeightAndBiasSharding(
                     shard_count=self.shard_count,
-                    reduction_dim=1,
                 ).theta_sharding(),
                 "attn_output": LinearSplitReductionDimSharding(
                     shard_count=self.shard_count
@@ -468,12 +466,19 @@ class TokenEmbeddingLayerReplicatedSharding(ThetaLayerSharding):
         )
 
 
-def shard_theta(theta: Theta, config: "LlamaModelConfig") -> Theta:
-    return ops.reshard(
-        theta,
-        LlamaSharding(
+def shard_theta(
+    theta: Theta,
+    config: Optional["LlamaModelConfig"] = None,
+    sharding: ThetaLayerSharding = None,
+) -> Theta:
+    assert config or sharding, "shard_theta requires config or sharding"
+    if sharding is None:
+        sharding = LlamaSharding(
             shard_count=config.tensor_parallelism_size,
             attention_block_count=config.hp.block_count,
             model_arch=config.hp.model_arch,
-        ),
+        )
+    return ops.reshard(
+        theta,
+        spec=sharding,
     )

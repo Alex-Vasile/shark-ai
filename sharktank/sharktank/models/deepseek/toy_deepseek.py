@@ -7,7 +7,7 @@
 from sharktank.models.deepseek.testing import make_random_deepseek_theta
 
 from sharktank.layers.configs import LlamaHParams, LlamaModelConfig
-from sharktank.types import Dataset
+from sharktank.types import Dataset, Theta
 
 import argparse
 import torch
@@ -19,7 +19,7 @@ parser.add_argument("-s", "--seed", default=12345)
 parser.add_argument("-o", "--output", default="/tmp/toy_deepseek.irpa")
 
 
-def generate(seed):
+def generate(seed: int) -> tuple[Theta, LlamaModelConfig]:
     torch.manual_seed(seed=12345)
 
     # Constants
@@ -56,6 +56,7 @@ def generate(seed):
             expert_count=expert_count,
             expert_used_count=used_experts,
             expert_shared_count=1,
+            moe_intermediate_size=7,
             n_expert_groups=2,
             n_limited_groups=2,
             n_dense_layers=3,

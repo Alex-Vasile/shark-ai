@@ -13,7 +13,6 @@ from sharktank.types import AnyTensor
 
 from .base import Theta, ThetaLayer
 from .linear import LinearLayer
-from .norm import RMSNormLayer
 
 
 __all__ = [

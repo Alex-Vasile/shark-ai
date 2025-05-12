@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from .base import ThetaLayer
 from .linear import LinearLayer
 from . import FFN
-from sharktank.types import AnyTensor, DefaultPrimitiveTensor, Theta
+from sharktank.types import DefaultPrimitiveTensor, Theta
 from sharktank.ops import einsum_2args, elementwise
 from sharktank import ops
 
@@ -134,7 +134,7 @@ class DenseFFNMOE(ThetaLayer):
         num_tokens, input_feature_dim = h.shape
 
         router_scores = ops.reshard_like(
-            torch.empty([num_tokens, self.num_experts]), like=h
+            torch.empty([num_tokens, self.num_experts], device=h.device), like=h
         )
         # (self.num_experts, num_tokens)
         router_scores = (
@@ -145,7 +145,7 @@ class DenseFFNMOE(ThetaLayer):
 
         # (self.num_experts, num_tokens)
         router_indices = (
-            ops.reshard_like(torch.arange(num_tokens), router_scores)
+            ops.reshard_like(torch.arange(num_tokens, device=h.device), router_scores)
             .view(1, -1)
             .expand(self.num_experts, -1)
         )
