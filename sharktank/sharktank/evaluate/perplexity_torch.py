@@ -191,7 +191,7 @@ class PerplexityTorch:
             len(token_ids[0]) // self.generator.model.config.block_seq_stride
         ) * len(test_prompts) + 1
 
-        self.max_prompt_length = max(seq_lens)
+        self.max_prompt_length = 20  # max(seq_lens)
 
         self.token_ids = torch.tensor(token_ids, device=self.device)
 
