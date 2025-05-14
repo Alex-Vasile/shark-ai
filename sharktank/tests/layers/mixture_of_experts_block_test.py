@@ -145,6 +145,7 @@ class MoeBlockTest(unittest.TestCase):
         from sharktank.layers import MoeBlock
 
         theta = make_random_moe_block_theta(
+            block_idx=0,
             ffn_dim=feature_dim,
             expert_hidden_dim=expert_hidden_dim,
             num_experts=num_experts,
@@ -251,6 +252,7 @@ class MoeBlockTest(unittest.TestCase):
         from sharktank.layers import MoeBlock
 
         theta = make_random_moe_block_theta(
+            block_idx=0,
             ffn_dim=feature_dim,
             expert_hidden_dim=expert_hidden_dim,
             num_experts=num_experts,

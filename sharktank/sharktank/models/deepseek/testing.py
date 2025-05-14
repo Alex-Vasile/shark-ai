@@ -23,7 +23,6 @@ def make_deepseek_attention_block(
     block_idx: int,
     head_count: int,
     head_count_kv: int,
-    head_dim: int,
     embedding_length: int,
     feed_forward_length: int,
     qk_rope_head_dim: int,
@@ -52,6 +51,7 @@ def make_deepseek_attention_block(
 
     if block_idx >= n_dense_layers:
         ffn_theta = make_random_moe_block_theta(
+            block_idx=block_idx,
             ffn_dim=embedding_length,
             expert_hidden_dim=moe_intermediate_size,
             num_experts=expert_count,
@@ -85,7 +85,6 @@ def make_random_deepseek_theta(
             block_idx=i,
             head_count=config.hp.attention_head_count,
             head_count_kv=config.hp.attention_head_count_kv,
-            head_dim=config.hp.attn_head_dim,
             embedding_length=config.hp.embedding_length,
             feed_forward_length=config.hp.feed_forward_length,
             q_lora_rank=config.hp.q_lora_rank,
