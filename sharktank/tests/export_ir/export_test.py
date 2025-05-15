@@ -31,7 +31,7 @@ import torch
 
 class ExportTest(TestCase):
     def testFlattenSignature(self):
-        expected_a = [ReplicatedTensor(ts=[torch.tensor([1])])]
+        expected_a = [ReplicatedTensor(shards=[torch.tensor([1])])]
         expected_b = {"element": DefaultPrimitiveTensor(data=torch.tensor([2]))}
         expected_c = torch.tensor([3])
 
@@ -56,12 +56,12 @@ class ExportTest(TestCase):
             {
                 "a": [
                     SplitPrimitiveTensor(
-                        ts=[torch.tensor([1]), torch.tensor([2])], shard_dim=0
+                        shards=[torch.tensor([1]), torch.tensor([2])], shard_dim=0
                     )
                 ]
             },
             torch.tensor([3]),
-            ReplicatedTensor(ts=[torch.tensor([4]), torch.tensor([5])]),
+            ReplicatedTensor(shards=[torch.tensor([4]), torch.tensor([5])]),
         ]
         affinities = get_argument_flat_device_affinities(*args)
         expected_affinities = {
@@ -77,7 +77,7 @@ class ExportTest(TestCase):
         reason="https://github.com/nod-ai/shark-ai/issues/685",
     )
     def testExportWithArgumentDeviceAffinities(self):
-        args = (ReplicatedTensor(ts=[torch.tensor([1])]), torch.tensor([[2]]))
+        args = (ReplicatedTensor(shards=[torch.tensor([1])]), torch.tensor([[2]]))
 
         class Module(torch.nn.Module):
             def f(self, a, b):

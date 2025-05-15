@@ -289,13 +289,13 @@ class InvertTest(unittest.TestCase):
     def testInvertReplicatedTensor(self):
         tensor = torch.rand(2, 3).bool()
         expected_result = ~tensor
-        actual_result = ~ReplicatedTensor(ts=tensor, shard_count=2)
+        actual_result = ~ReplicatedTensor(shards=tensor, shard_count=2)
         assert ops.equal(actual_result, expected_result)
 
     def testInvertSplitTensor(self):
         tensor = torch.rand(2, 3).bool()
         expected_result = ~tensor
-        actual_result = ~SplitPrimitiveTensor(ts=tensor, shard_dim=0, shard_count=2)
+        actual_result = ~SplitPrimitiveTensor(shards=tensor, shard_dim=0, shard_count=2)
         assert ops.equal(actual_result, expected_result)
 
 

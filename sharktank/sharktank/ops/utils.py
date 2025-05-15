@@ -85,7 +85,7 @@ def call_trivially_replicable(
 
     def make_replicated_tensor_if_tensor_collection(x: Any) -> Any:
         if _is_tensor_collection(x):
-            return ReplicatedTensor(ts=x)
+            return ReplicatedTensor(shards=x)
         return x
 
     result_with_replicated_tensor = tree.map_leaves(
@@ -112,7 +112,7 @@ def trivially_replicable(fn: Callable[..., Any]) -> Callable[..., Any]:
     arg = torch.Tensor([1, 2, 3])
     shard_count = 2
     replicated_arg = ReplicatedTensor(
-        ts=arg, shard_count=shard_count
+        shards=arg, shard_count=shard_count
     )
     fn(replicated_arg)
     ```

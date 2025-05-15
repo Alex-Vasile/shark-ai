@@ -64,7 +64,7 @@ class PlanarQuantizedTensorTest(unittest.TestCase):
 class ShardedTensorTest(unittest.TestCase):
     def testReplicatedTensorSaveLoad(self):
         tensor = [torch.rand([2, 3, 4], dtype=torch.float32)] * 3
-        replicated_tensor = ReplicatedTensor(ts=tensor, name="the_tensor")
+        replicated_tensor = ReplicatedTensor(shards=tensor, name="the_tensor")
         theta = Theta([replicated_tensor])
         dataset = Dataset({}, theta)
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -80,7 +80,7 @@ class ShardedTensorTest(unittest.TestCase):
     def testShardedPrimitiveTensorSaveLoad(self):
         tensor = torch.rand([2, 6, 4], dtype=torch.float32)
         sharded_tensor = SplitPrimitiveTensor(
-            ts=tensor, shard_count=3, name="the_tensor", shard_dim=1
+            shards=tensor, shard_count=3, name="the_tensor", shard_dim=1
         )
         theta = Theta([sharded_tensor])
         dataset = Dataset({}, theta)
@@ -94,7 +94,7 @@ class ShardedTensorTest(unittest.TestCase):
     def testUnreducedTensorSaveLoad(self):
         tensor = torch.rand([2, 6, 4], dtype=torch.float32)
         sharded_tensor = UnreducedTensor(
-            ts=torch.split(tensor, 1, dim=1), name="the_tensor"
+            shards=torch.split(tensor, 1, dim=1), name="the_tensor"
         )
         theta = Theta([sharded_tensor])
         dataset = Dataset({}, theta)
@@ -107,7 +107,7 @@ class ShardedTensorTest(unittest.TestCase):
 
     def testReplicatedTensorExtractSlice(self):
         tensor = torch.rand([2, 3, 4], dtype=torch.float32)
-        replicated_tensor = ReplicatedTensor(ts=tensor, shard_count=3)
+        replicated_tensor = ReplicatedTensor(shards=tensor, shard_count=3)
         s = [slice(1, 2), slice(0, 3, 2), None]
         expected_result = tensor[s]
         replicated_sliced_tensor = replicated_tensor[s]
@@ -117,7 +117,7 @@ class ShardedTensorTest(unittest.TestCase):
 
     def testReplicatedTensorExtractElement(self):
         tensor = torch.rand([2, 3, 4], dtype=torch.float32)
-        replicated_tensor = ReplicatedTensor(ts=tensor, shard_count=3)
+        replicated_tensor = ReplicatedTensor(shards=tensor, shard_count=3)
         idx = (
             1,
             2,
@@ -131,7 +131,7 @@ class ShardedTensorTest(unittest.TestCase):
 
     def testSplitTensorExtractSliceOfNonSplitDim(self):
         tensor = torch.rand([5, 6], dtype=torch.float32)
-        sharded_tensor = SplitPrimitiveTensor(ts=tensor, shard_count=3, shard_dim=1)
+        sharded_tensor = SplitPrimitiveTensor(shards=tensor, shard_count=3, shard_dim=1)
         s = [slice(0, 2), slice(None), None, None]
         expected_result = tensor[s]
         sharded_slice = sharded_tensor[s]
@@ -169,21 +169,21 @@ class ShardedTensorTest(unittest.TestCase):
 
     def testCloneUnreducedTensor(self):
         tensors = [torch.rand([4, 3, 4], dtype=torch.float32) for _ in range(4)]
-        sharded_tensor = UnreducedTensor(ts=tensors)
+        sharded_tensor = UnreducedTensor(shards=tensors)
         cloned_tensor = sharded_tensor.clone()
         assert sharded_tensor.is_deep_equal(cloned_tensor)
         assert iterables_equal(sharded_tensor.devices, cloned_tensor.devices)
 
     def testCloneSplitPrimitiveTensor(self):
         tensor = torch.rand([4, 3, 4], dtype=torch.float32)
-        sharded_tensor = SplitPrimitiveTensor(ts=tensor, shard_dim=0, shard_count=4)
+        sharded_tensor = SplitPrimitiveTensor(shards=tensor, shard_dim=0, shard_count=4)
         cloned_tensor = sharded_tensor.clone()
         assert sharded_tensor.is_deep_equal(cloned_tensor)
         assert iterables_equal(sharded_tensor.devices, cloned_tensor.devices)
 
     def testCloneReplicatedTensor(self):
         tensor = torch.rand([4, 3, 4], dtype=torch.float32)
-        sharded_tensor = ReplicatedTensor(ts=tensor, shard_count=4)
+        sharded_tensor = ReplicatedTensor(shards=tensor, shard_count=4)
         cloned_tensor = sharded_tensor.clone()
         assert sharded_tensor.is_deep_equal(cloned_tensor)
         assert iterables_equal(sharded_tensor.devices, cloned_tensor.devices)
@@ -199,7 +199,7 @@ class ShardedTensorTest(unittest.TestCase):
             ExternalTensorTrait("", f"shard number {i}").set(shard)
             shards.append(shard)
 
-        original_tensor = SplitPrimitiveTensor(ts=shards, shard_dim=0)
+        original_tensor = SplitPrimitiveTensor(shards=shards, shard_dim=0)
         cloned_tensor = original_tensor.clone(
             devices=tuple(1 + i for i in range(num_shards))
         )

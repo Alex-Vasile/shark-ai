@@ -26,7 +26,7 @@ class CheckThatOnSameDevicesTest(unittest.TestCase):
         ts_pre = [
             SplitPrimitiveTensor(
                 shard_dim=1,
-                ts=shards,
+                shards=shards,
                 devices=tuple(shard_count + d for d in range(shard_count)),
             )
             for _ in range(tensor_count)
@@ -43,7 +43,7 @@ class CheckThatOnSameDevicesTest(unittest.TestCase):
         t_pre = [
             SplitPrimitiveTensor(
                 shard_dim=1,
-                ts=shards,
+                shards=shards,
                 devices=tuple(shard_count * i + d for d in range(shard_count)),
             )
             for i in range(tensor_count)
@@ -67,7 +67,9 @@ class AllGatherTest(unittest.TestCase):
         expected_result = torch.cat(shards, dim=shard_dim)
 
         devices = (0, 6, 1)
-        sharded = SplitPrimitiveTensor(shard_dim=shard_dim, ts=shards, devices=devices)
+        sharded = SplitPrimitiveTensor(
+            shard_dim=shard_dim, shards=shards, devices=devices
+        )
         actual_result = ops.all_gather(sharded)
 
         for i in range(shard_count):
@@ -88,7 +90,9 @@ class AllReduceTest(unittest.TestCase):
         expected_result = torch.add(torch.add(shards[0], shards[1]), shards[2])
 
         devices = (0, 6, 1)
-        sharded = SplitPrimitiveTensor(shard_dim=shard_dim, ts=shards, devices=devices)
+        sharded = SplitPrimitiveTensor(
+            shard_dim=shard_dim, shards=shards, devices=devices
+        )
         actual_result = ops.all_reduce(sharded)
 
         for i in range(shard_count):
@@ -161,9 +165,9 @@ class CatTest(unittest.TestCase):
         a = torch.rand(5, 4, dtype=torch.float32)
         b = torch.rand(3, 4, dtype=torch.float32)
 
-        sharded_a = ReplicatedTensor(ts=a, shard_count=shard_count, devices=devices)
+        sharded_a = ReplicatedTensor(shards=a, shard_count=shard_count, devices=devices)
         sharded_b = ReplicatedTensor(
-            ts=b, shard_count=shard_count, devices=tuple(range(shard_count))
+            shards=b, shard_count=shard_count, devices=tuple(range(shard_count))
         )
 
         with pytest.raises(
@@ -175,7 +179,7 @@ class CatTest(unittest.TestCase):
 class CloneTest(unittest.TestCase):
     def testCloneReplicatedFail(self):
         original = ReplicatedTensor(
-            ts=torch.rand(5, 4, dtype=torch.float32), shard_count=4
+            shards=torch.rand(5, 4, dtype=torch.float32), shard_count=4
         )
         try:
             original.clone(shards=None)
@@ -187,7 +191,7 @@ class CloneTest(unittest.TestCase):
 
     def testCloneSplitFail(self):
         original = SplitPrimitiveTensor(
-            ts=torch.rand(5, 4, dtype=torch.float32), shard_dim=1, shard_count=4
+            shards=torch.rand(5, 4, dtype=torch.float32), shard_dim=1, shard_count=4
         )
         try:
             original.clone(shards=None)
@@ -198,7 +202,7 @@ class CloneTest(unittest.TestCase):
         ), "Should have thrown an error when passing incorrect keywords to clone"
 
     def testCloneUnreducedFail(self):
-        original = UnreducedTensor(ts=[torch.rand(5, 4, dtype=torch.float32)])
+        original = UnreducedTensor(shards=[torch.rand(5, 4, dtype=torch.float32)])
         try:
             original.clone(shards=None)
         except:
@@ -213,10 +217,10 @@ class IndexSelectTest(unittest.TestCase):
         shard_count = 5
         shards = [torch.rand(5, 4, dtype=torch.float32) for _ in range(shard_count)]
         devices = tuple(5 + i for i in range(shard_count))
-        base = ReplicatedTensor(ts=shards, devices=devices)
+        base = ReplicatedTensor(shards=shards, devices=devices)
         indices = torch.tensor([0, 3, 1, 4], dtype=torch.int64)
         indices_t = ReplicatedTensor(
-            ts=indices, shard_count=shard_count, devices=devices
+            shards=indices, shard_count=shard_count, devices=devices
         )
 
         expected_results = [torch.index_select(shard, 0, indices) for shard in shards]
@@ -238,13 +242,13 @@ class MatmulTest(unittest.TestCase):
         shard_count = 3
         devices = tuple(1 + 2 * i for i in range(shard_count))
         a_sharded = SplitPrimitiveTensor(
-            ts=a,
+            shards=a,
             shard_dim=1,
             shard_count=shard_count,
             devices=devices,
         )
         b_sharded = SplitPrimitiveTensor(
-            ts=b,
+            shards=b,
             shard_dim=1,
             shard_count=shard_count,
             devices=devices,
@@ -267,7 +271,7 @@ class TransposeTest(unittest.TestCase):
         shards = [
             torch.rand(shard_shape, dtype=torch.float32) for _ in range(shard_count)
         ]
-        pre = SplitPrimitiveTensor(shard_dim=1, ts=shards, devices=devices)
+        pre = SplitPrimitiveTensor(shard_dim=1, shards=shards, devices=devices)
 
         post = pre.T
         assert iterables_equal(pre.devices, post.devices)

@@ -31,7 +31,7 @@ def flatten_signature(
     ```
     @flatten_signature(
         {
-            "a1": SplitPrimitiveTensor(ts=[torch.tensor([1])], shard_dim=0),
+            "a1": SplitPrimitiveTensor(shards=[torch.tensor([1])], shard_dim=0),
             "a2": torch.tensor([2]),
         },
         [DefaultPrimitiveTensor(data=torch.tensor([3]))]
@@ -78,7 +78,7 @@ def get_argument_flat_device_affinities(
     ```
     get_argument_flat_device_affinities(
         torch.Tensor([1]),
-        [ReplicatedTensor(ts=[torch.tensor([2]), torch.tensor([3])])]
+        [ReplicatedTensor(shards=[torch.tensor([2]), torch.tensor([3])])]
     )
     ```
     returns

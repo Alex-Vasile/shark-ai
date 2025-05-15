@@ -225,7 +225,7 @@ class PerplexityIree:
         )
         prefill_shards = iree_to_torch(*prefill_iree_result)
         if self.tensor_parallelism_size > 1:
-            prefill_logits = ops.unshard(UnreducedTensor(ts=prefill_shards))
+            prefill_logits = ops.unshard(UnreducedTensor(shards=prefill_shards))
         else:  # Replicated or torch.Tensor
             prefill_logits = prefill_shards[0]
         prefill_logits = prefill_logits.clone().detach()
@@ -277,7 +277,7 @@ class PerplexityIree:
 
         decode_shards = iree_to_torch(*decode_iree_result)
         if self.tensor_parallelism_size > 1:
-            decode_logits = ops.unshard(UnreducedTensor(ts=decode_shards))
+            decode_logits = ops.unshard(UnreducedTensor(shards=decode_shards))
         else:  # Replicated or torch.Tensor
             decode_logits = decode_shards[0]
         decode_logits = torch.as_tensor(decode_logits[:, :, :])

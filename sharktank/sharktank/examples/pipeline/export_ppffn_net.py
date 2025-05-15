@@ -35,7 +35,7 @@ def create_theta(dim: int, shard_count: int, num_layers: int, save_path):
         _shard = torch.rand(dim, dim, dtype=torch.float16) / math.sqrt(dim)
         weights.append(
             SplitPrimitiveTensor(
-                name=f"w.{layer}", shard_dim=1, ts=_shard.split(split_size, dim=1)
+                name=f"w.{layer}", shard_dim=1, shards=_shard.split(split_size, dim=1)
             )
             if shard_count > 1
             else DefaultPrimitiveTensor(name=f"w.{layer}", data=_shard)
@@ -82,14 +82,14 @@ class PPFFN(ThetaLayer):
             )
             for i, shard in enumerate(x.shards)
         ]
-        return x.clone(ts=shards, devices=next_devices)
+        return x.clone(shards=shards, devices=next_devices)
 
     def forward(self, x: torch.Tensor):
         num_blocks = len(self.block_to_pipeline)
         shard_count = self.theta.tensor("w", "0").shard_count
 
         x = ReplicatedTensor(
-            ts=x, shard_count=shard_count, devices=self.pipeline_to_devices[0]
+            shards=x, shard_count=shard_count, devices=self.pipeline_to_devices[0]
         )
         for block in range(num_blocks):
             weight: SplitPrimitiveTensor | ReplicatedTensor = self.theta.tensor(

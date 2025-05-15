@@ -144,10 +144,10 @@ class PagedAttention:
             result = shards[0]
             if self.shard_count > 1:
                 result = SplitPrimitiveTensor(
-                    ts=shards, shard_dim=4, devices=page_slab.devices
+                    shards=shards, shard_dim=4, devices=page_slab.devices
                 )
             elif pipeline > 1:
-                result = ReplicatedTensor(ts=shards, devices=page_slab.devices)
+                result = ReplicatedTensor(shards=shards, devices=page_slab.devices)
 
             unflattened.append(result)
 
@@ -195,9 +195,11 @@ class PagedAttention:
                 ops.flatten(shard, start_dim=1) for shard in sharded_page_table.shards
             ]
             flat_sharded_page_tables.append(
-                SplitPrimitiveTensor(ts=shards_flattened, shard_dim=1, devices=devices)
+                SplitPrimitiveTensor(
+                    shards=shards_flattened, shard_dim=1, devices=devices
+                )
                 if self.shard_count > 1
-                else ReplicatedTensor(ts=shards_flattened, devices=devices)
+                else ReplicatedTensor(shards=shards_flattened, devices=devices)
             )
         return flat_sharded_page_tables
 
@@ -237,9 +239,9 @@ class PagedAttention:
 
         return [
             (
-                SplitPrimitiveTensor(ts=shards[i], shard_dim=1, devices=devices)
+                SplitPrimitiveTensor(shards=shards[i], shard_dim=1, devices=devices)
                 if len(shards[i]) > 1
-                else ReplicatedTensor(ts=shards[i], devices=devices)
+                else ReplicatedTensor(shards=shards[i], devices=devices)
             )
             for i, devices in enumerate(self.pipeline_to_device_map)
         ]
@@ -346,9 +348,9 @@ class PagedAttention:
                 partitions = [partitions] * seq_positions.shard_count
                 transformer_block = [transformer_block] * seq_positions.shard_count
 
-                partitions = ReplicatedTensor(ts=partitions, devices=devices)
+                partitions = ReplicatedTensor(shards=partitions, devices=devices)
                 transformer_block = ReplicatedTensor(
-                    ts=transformer_block, devices=devices
+                    shards=transformer_block, devices=devices
                 )
 
             partitions = partitions.repeat(bs, 1)

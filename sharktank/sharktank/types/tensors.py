@@ -891,7 +891,7 @@ class ShardedTensor(InferenceTensor):
     def __init__(
         self,
         *,
-        ts: list[torch.Tensor] | list[DefaultPrimitiveTensor],
+        shards: list[torch.Tensor] | list[DefaultPrimitiveTensor],
         shape: list[int],
         shard_dim: int | None,
         name: str = UnnamedTensorName,
@@ -907,11 +907,11 @@ class ShardedTensor(InferenceTensor):
             )
             if isinstance(t, torch.Tensor)
             else t
-            for i, t in enumerate(ts)
+            for i, t in enumerate(shards)
         )
 
     def __invert__(self):
-        return self.clone(ts=[~t for t in self._shards])
+        return self.clone(shards=[~shard for shard in self._shards])
 
     @property
     def devices(self) -> Tuple[int]:
@@ -986,18 +986,20 @@ class ShardedTensorBase(ShardedTensor):
         self,
         *,
         shard_dim: int | None,
-        ts: list[torch.Tensor],
+        shards: list[torch.Tensor],
         name: str = UnnamedTensorName,
         shape: Optional[list[int]],
         devices: Tuple[int] | None,
     ):
-        assert len(ts) > 0
-        assert shard_dim is None or (shard_dim >= 0 and len(ts[0].shape) > shard_dim)
+        assert len(shards) > 0
+        assert shard_dim is None or (
+            shard_dim >= 0 and len(shards[0].shape) > shard_dim
+        )
         if devices is None:
-            devices = tuple(range(len(ts)))
-        assert len(ts) == len(devices)
+            devices = tuple(range(len(shards)))
+        assert len(shards) == len(devices)
         super().__init__(
-            ts=ts, name=name, shape=shape, shard_dim=shard_dim, devices=devices
+            shards=shards, name=name, shape=shape, shard_dim=shard_dim, devices=devices
         )
 
     @property
@@ -1030,14 +1032,14 @@ class ShardedTensorBase(ShardedTensor):
     def _clone_with_globals(
         self, new_globals: dict[str, torch.Tensor]
     ) -> "InferenceTensor":
-        ts = []
+        shards = []
         for k in self.globals.keys():
-            ts.append(new_globals[k])
+            shards.append(new_globals[k])
         return self.__class__(
             name=self.name,
             shape=self.shape,
             shard_dim=self.shard_dim,
-            ts=ts,
+            shards=shards,
             devices=self.devices,
         )
 
@@ -1055,12 +1057,12 @@ class ShardedTensorBase(ShardedTensor):
             if "shard_dim" in extra_properties
             else None
         )
-        ts = []
+        shards = []
         for i in range(shard_count):
             t_name = str(i)
             try:
                 t = raw_tensors[t_name]
-                ts.append(t)
+                shards.append(t)
                 # TODO: this should be changed to tracked device affinity
                 DeviceTensorTrait(i).set(t)
             except KeyError as e:
@@ -1068,9 +1070,9 @@ class ShardedTensorBase(ShardedTensor):
                     f"Missing component tensor '{t_name}' in {raw_tensors.keys()}"
                 ) from e
         if shard_dim is None:
-            return cls(name=name, shape=shape, ts=ts)
+            return cls(name=name, shape=shape, shards=shards)
         else:
-            return cls(name=name, shape=shape, ts=ts, shard_dim=shard_dim)
+            return cls(name=name, shape=shape, shards=shards, shard_dim=shard_dim)
 
     def __repr__(self):
         return (
@@ -1148,43 +1150,49 @@ class SplitPrimitiveTensor(ShardedTensorBase):
         self,
         *,
         shard_dim: int,
-        ts: list[torch.Tensor] | torch.Tensor,
+        shards: list[torch.Tensor] | torch.Tensor,
         shard_count: None | int = None,
         name: str = UnnamedTensorName,
         shape: Optional[list[int]] = None,
         devices: Tuple[int] | None = None,
     ):
         """
-        If `ts` is a list of tensors, it is interpreted as the shards.
+        If `shards` is a list of tensors, it is interpreted as the shards.
         Then `shard_count` must be None.
-        If `ts` is a tensor then `shard_count` must be provided and it,
+        If `shards` is a tensor then `shard_count` must be provided and it,
         will be split along dimension `shard_dim` into `shard_count`
         number of pieces.
         """
         if devices is None:
-            num_shards = shard_count if isinstance(ts, torch.Tensor) else len(ts)
+            num_shards = (
+                shard_count if isinstance(shards, torch.Tensor) else len(shards)
+            )
             devices = tuple(range(num_shards))
 
-        if isinstance(ts, torch.Tensor):
+        if isinstance(shards, torch.Tensor):
             from sharktank.ops import transfer_to_logical_device
 
             assert shard_count is not None
             assert (
                 shard_count > 1
             ), "SplitTensor must have at least 2 shards. Use ReplicatedTensor for 1 shard."
-            ts = ts.split(ceildiv(ts.shape[shard_dim], shard_count), dim=shard_dim)
-            ts = [transfer_to_logical_device(t, devices[i]) for i, t in enumerate(ts)]
-            assert len(ts) == shard_count
+            shards = shards.split(
+                ceildiv(shards.shape[shard_dim], shard_count), dim=shard_dim
+            )
+            shards = [
+                transfer_to_logical_device(t, devices[i]) for i, t in enumerate(shards)
+            ]
+            assert len(shards) == shard_count
             shard_count = None
 
         assert shard_count is None
         assert (
-            len(ts) > 1
+            len(shards) > 1
         ), "SplitTensor must have at least 2 shards. Use ReplicatedTensor for 1 shard."
-        first_shape = ts[0].shape
+        first_shape = shards[0].shape
         assert len(first_shape) > shard_dim
         expected_shape = list(first_shape)
-        expected_shape[shard_dim] = sum([t.shape[shard_dim] for t in ts])
+        expected_shape[shard_dim] = sum([t.shape[shard_dim] for t in shards])
         if shape is not None:
             shape = list(shape)
             assert expected_shape == shape
@@ -1192,7 +1200,7 @@ class SplitPrimitiveTensor(ShardedTensorBase):
             shape = expected_shape
 
         # Assert the shapes.
-        for i, t in enumerate(ts):
+        for i, t in enumerate(shards):
             t_shape = list(t.shape)
             assert len(shape) == len(
                 t_shape
@@ -1203,7 +1211,7 @@ class SplitPrimitiveTensor(ShardedTensorBase):
 
         super().__init__(
             name=name,
-            ts=ts,
+            shards=shards,
             shape=shape,
             shard_dim=shard_dim,
             devices=devices,
@@ -1215,12 +1223,12 @@ class SplitPrimitiveTensor(ShardedTensorBase):
         kwargs["shape"] = kwargs.get("shape", self.shape)
         kwargs["shard_dim"] = kwargs.get("shard_dim", self.shard_dim)
 
-        if "ts" in kwargs:
-            # Only override shard_count if ts is a tensor.
-            if isinstance(kwargs["ts"], torch.Tensor):
+        if "shards" in kwargs:
+            # Only override shard_count if shards is a tensor.
+            if isinstance(kwargs["shards"], torch.Tensor):
                 kwargs["shard_count"] = kwargs.get("shard_count", self.shard_count)
         else:
-            kwargs["ts"] = self.shards
+            kwargs["shards"] = self.shards
         return SplitPrimitiveTensor(**kwargs)
 
     def _is_slicing_split_dim(self, key):
@@ -1290,7 +1298,7 @@ class SplitPrimitiveTensor(ShardedTensorBase):
                 shard_dim -= 1
 
         return SplitPrimitiveTensor(
-            ts=shards, shard_dim=shard_dim, devices=self.devices
+            shards=shards, shard_dim=shard_dim, devices=self.devices
         )
 
     def __setitem__(self, key, value):
@@ -1317,51 +1325,58 @@ class ReplicatedTensor(ShardedTensor):
     def __init__(
         self,
         *,
-        ts: list[torch.Tensor] | torch.Tensor,
+        shards: list[torch.Tensor] | torch.Tensor,
         shard_count: None | int = None,
         name: str = UnnamedTensorName,
         devices: Tuple[int] | None = None,
     ):
         """
-        If `ts` is a list of tensors, it is interpreted as the shards.
+        If `shards` is a list of tensors, it is interpreted as the shards.
         Then `shard_count` must be None.
-        If `ts` is a tensor then `shard_count` must be provided and it,
+        If `shards` is a tensor then `shard_count` must be provided and it,
         will be replicated that many times.
         """
         if devices is None:
-            num_shards = shard_count if isinstance(ts, torch.Tensor) else len(ts)
+            num_shards = (
+                shard_count if isinstance(shards, torch.Tensor) else len(shards)
+            )
             devices = tuple(range(num_shards))
 
-        if isinstance(ts, torch.Tensor):
+        if isinstance(shards, torch.Tensor):
             assert shard_count is not None
             from sharktank.ops import transfer_to_logical_device
 
-            ts = [
-                transfer_to_logical_device(ts, devices[i]) for i in range(shard_count)
+            shards = [
+                transfer_to_logical_device(shards, devices[i])
+                for i in range(shard_count)
             ]
             shard_count = None
 
         assert shard_count is None
-        assert len(ts) > 0
-        assert len(ts) == len(devices)
-        for shard in ts[1:]:
-            assert all(s_0 == s_i for (s_0, s_i) in zip(ts[0].shape, shard.shape))
+        assert len(shards) > 0
+        assert len(shards) == len(devices)
+        for shard in shards[1:]:
+            assert all(s_0 == s_i for (s_0, s_i) in zip(shards[0].shape, shard.shape))
 
         super().__init__(
-            ts=ts, name=name, shape=list(ts[0].shape), shard_dim=None, devices=devices
+            shards=shards,
+            name=name,
+            shape=list(shards[0].shape),
+            shard_dim=None,
+            devices=devices,
         )
 
     def clone(self, **kwargs) -> "ReplicatedTensor":
-        kwargs["ts"] = kwargs.get("ts", self.shards)
+        kwargs["shards"] = kwargs.get("shards", self.shards)
         kwargs["name"] = kwargs.get("name", self.name)
         kwargs["devices"] = kwargs.get("devices", self.devices)
 
-        if "ts" in kwargs:
-            # Only override shard_count if ts is a tensor.
-            if isinstance(kwargs["ts"], torch.Tensor):
+        if "shards" in kwargs:
+            # Only override shard_count if shards is a tensor.
+            if isinstance(kwargs["shards"], torch.Tensor):
                 kwargs["shard_count"] = kwargs.get("shard_count", self.shard_count)
         else:
-            kwargs["ts"] = self.shards
+            kwargs["shards"] = self.shards
         return ReplicatedTensor(**kwargs)
 
     @property
@@ -1389,12 +1404,12 @@ class ReplicatedTensor(ShardedTensor):
     def _clone_with_globals(
         self, new_globals: dict[str, torch.Tensor]
     ) -> "InferenceTensor":
-        ts = []
+        shards = []
         for k in self.globals.keys():
-            ts.append(new_globals[k])
+            shards.append(new_globals[k])
         return ReplicatedTensor(
             name=self.name,
-            ts=ts,
+            shards=shards,
             devices=self.devices,
         )
 
@@ -1408,19 +1423,19 @@ class ReplicatedTensor(ShardedTensor):
         shard_count = int(extra_properties["shard_count"])
         try:
             # We have to do this to avoid exporting as part of the `mlir` blob:
-            t = raw_tensors[""]
-            ts = [raw_tensors[""]]
+            shard = raw_tensors[""]
+            shards = [raw_tensors[""]]
             for i in range(1, shard_count):
-                nt = deepcopy(t)
-                ts.append(nt)
+                nt = deepcopy(shard)
+                shards.append(nt)
 
             # TODO This should be changed to assigned affinities
             for i in range(shard_count):
-                DeviceTensorTrait(i).set(ts[i])
+                DeviceTensorTrait(i).set(shards[i])
 
         except KeyError as e:
             raise IOError(f"Missing component tensor '' in {raw_tensors.keys()}") from e
-        return cls(name=name, ts=ts)
+        return cls(name=name, shards=shards)
 
     def __getitem__(self, key):
         keys = [key]
@@ -1436,7 +1451,7 @@ class ReplicatedTensor(ShardedTensor):
                 else:
                     shard_keys.append(k)
             shards.append(shard[*shard_keys])
-        return ReplicatedTensor(ts=shards, devices=self.devices)
+        return ReplicatedTensor(shards=shards, devices=self.devices)
 
     def __repr__(self):
         return (
@@ -1464,24 +1479,24 @@ class UnreducedTensor(ShardedTensorBase):
     def __init__(
         self,
         *,
-        ts: list[torch.Tensor],
+        shards: list[torch.Tensor],
         name: str = UnnamedTensorName,
         shape: Optional[list[int]] = None,
         devices: Tuple[int] | None = None,
     ):
-        assert len(ts) > 0
-        shape = list(ts[0].shape if shape is None else shape)
-        assert all(shape == list(t.shape) for t in ts)
+        assert len(shards) > 0
+        shape = list(shards[0].shape if shape is None else shape)
+        assert all(shape == list(t.shape) for t in shards)
         super().__init__(
             name=name,
-            ts=ts,
+            shards=shards,
             shape=shape,
             shard_dim=None,
             devices=devices,
         )
 
     def clone(self, **kwargs) -> "UnreducedTensor":
-        kwargs["ts"] = kwargs.get("ts", self.shards)
+        kwargs["shards"] = kwargs.get("shards", self.shards)
         kwargs["name"] = kwargs.get("name", self.name)
         kwargs["shape"] = kwargs.get("shape", self.shape)
         kwargs["devices"] = kwargs.get("devices", self.devices)
@@ -1676,7 +1691,7 @@ def unflatten_split_primitive_tensor(
 ) -> SplitPrimitiveTensor:
     return SplitPrimitiveTensor(
         shard_dim=ctx["shard_dim"],
-        ts=list(values),
+        shards=list(values),
         name=ctx["name"],
         devices=ctx["devices"],
     )
@@ -1704,7 +1719,9 @@ def flatten_replicated_tensor(
 def unflatten_replicated_tensor(
     values: Iterable[Any], ctx: torch.utils._pytree.Context
 ) -> ReplicatedTensor:
-    return ReplicatedTensor(ts=list(values), name=ctx["name"], devices=ctx["devices"])
+    return ReplicatedTensor(
+        shards=list(values), name=ctx["name"], devices=ctx["devices"]
+    )
 
 
 def flatten_with_keys_replicated_tensor(t: ReplicatedTensor):
@@ -1729,7 +1746,9 @@ def flatten_unreduced_tensor(
 def unflatten_unreduced_tensor(
     values: Iterable[Any], ctx: torch.utils._pytree.Context
 ) -> UnreducedTensor:
-    return UnreducedTensor(ts=list(values), name=ctx["name"], devices=ctx["devices"])
+    return UnreducedTensor(
+        shards=list(values), name=ctx["name"], devices=ctx["devices"]
+    )
 
 
 def flatten_with_keys_unreduced_tensor(t: UnreducedTensor):

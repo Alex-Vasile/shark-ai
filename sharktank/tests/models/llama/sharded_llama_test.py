@@ -386,13 +386,15 @@ class ShardedLlamaTest(unittest.TestCase):
                 trace_path_prefix=path_prefix if dump_enabled else None,
             )
             prefill_iree_result = UnreducedTensor(
-                ts=[t.clone() for t in iree_to_torch(*prefill_iree_result)]
+                shards=[t.clone() for t in iree_to_torch(*prefill_iree_result)]
             )
             prefill_iree_cache_state_shards = prefill_iree_args[
                 -self.config.tensor_parallelism_size - 1 :
             ]
             prefill_iree_cache_state = SplitPrimitiveTensor(
-                ts=[t.clone() for t in iree_to_torch(*prefill_iree_cache_state_shards)],
+                shards=[
+                    t.clone() for t in iree_to_torch(*prefill_iree_cache_state_shards)
+                ],
                 shard_dim=sharded_prefill_kwargs["cache_state"][0].shard_dim,
             )
 
@@ -409,13 +411,15 @@ class ShardedLlamaTest(unittest.TestCase):
                 trace_path_prefix=path_prefix if dump_enabled else None,
             )
             decode_iree_result = UnreducedTensor(
-                ts=[t.clone() for t in iree_to_torch(*decode_iree_result)]
+                shards=[t.clone() for t in iree_to_torch(*decode_iree_result)]
             )
             decode_iree_cache_state_shards = decode_iree_args[
                 -self.config.tensor_parallelism_size - 1 :
             ]
             decode_iree_cache_state = SplitPrimitiveTensor(
-                ts=[t.clone() for t in iree_to_torch(*decode_iree_cache_state_shards)],
+                shards=[
+                    t.clone() for t in iree_to_torch(*decode_iree_cache_state_shards)
+                ],
                 shard_dim=sharded_decode_kwargs["cache_state"][0].shard_dim,
             )
 

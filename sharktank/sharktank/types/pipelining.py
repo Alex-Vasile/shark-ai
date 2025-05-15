@@ -58,9 +58,9 @@ def pipeline_parallelize_theta(
                 ).set(new_shard._data)
 
         block_data[key] = (
-            ReplicatedTensor(ts=new_shards, name=tensor.name, devices=new_devices)
+            ReplicatedTensor(shards=new_shards, name=tensor.name, devices=new_devices)
             if isinstance(tensor, PrimitiveTensor)
-            else tensor.clone(ts=new_shards, devices=new_devices)
+            else tensor.clone(shards=new_shards, devices=new_devices)
         )
 
     _t = theta.tensor("token_embd")["weight"]

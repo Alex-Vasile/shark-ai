@@ -111,7 +111,7 @@ def run_iree_module(
         )
         results = invoker(*module_input_args)
         shards = [torch.tensor(tensor.to_host()).clone() for tensor in results]
-        return SplitPrimitiveTensor(ts=shards, shard_dim=1)
+        return SplitPrimitiveTensor(shards=shards, shard_dim=1)
 
     return with_iree_device_context(run_iree_module, devices)
 

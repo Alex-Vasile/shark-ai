@@ -137,7 +137,7 @@ class PagedLlmModelV1(BaseCausalLMModel):
         shards = ShardedTensor.move_shards_to_new_devices(
             x.shards, old_devices=curr_devices, new_devices=next_devices
         )
-        return x.clone(ts=shards, devices=next_devices)
+        return x.clone(shards=shards, devices=next_devices)
 
     def prefill(
         self,

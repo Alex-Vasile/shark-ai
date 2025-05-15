@@ -62,7 +62,7 @@ class MmtRHSShardingTransform:
         shard_split_size = shard_dim_size // self.num_shards
         shard_ts = t.split(shard_split_size, dim=shard_dim)
         st = SplitPrimitiveTensor(
-            name=pt.name, shape=pt.shape, shard_dim=shard_dim, ts=shard_ts
+            name=pt.name, shape=pt.shape, shard_dim=shard_dim, shards=shard_ts
         )
         logger.debug("Sharding tensor %r -> %r", pt, st)
         return st

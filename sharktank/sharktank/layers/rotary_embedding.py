@@ -64,7 +64,7 @@ class RotaryEmbeddingLayer(BaseLayer):
         table = self.rotary_embed_table
         if isinstance(xt, ReplicatedTensor):
             return ReplicatedTensor(
-                ts=[
+                shards=[
                     self.forward_unsharded(
                         xt=unbox_tensor(s),
                         start_index=start_index,
@@ -93,7 +93,7 @@ class RotaryEmbeddingLayer(BaseLayer):
             )
             for xt_shard, rotary_shard in zip(xt.shards, rotary_shards)
         ]
-        return xt.clone(ts=xt_shards)
+        return xt.clone(shards=xt_shards)
 
     def _create_interleaved_tensor(_, dim):
         """Creates a tensor which indexes an tensor such that
@@ -214,7 +214,7 @@ class RotaryEmbeddingLayer(BaseLayer):
                     self._compute_rotary_embed_table(s.flatten()).unflatten(0, shape)
                     for s in positions_seq.shards
                 ]
-                freqs_cis = ReplicatedTensor(ts=ts)
+                freqs_cis = ReplicatedTensor(shards=ts)
             else:
                 freqs_cis = self._compute_rotary_embed_table(positions_seq.flatten())
 
@@ -237,7 +237,7 @@ class RotaryEmbeddingLayer(BaseLayer):
             )
             for xt_shard, mask_shard in zip(xt.shards, mask.shards)
         ]
-        return xt.clone(ts=xt_shards)
+        return xt.clone(shards=xt_shards)
 
     def apply_batched_mask_unsharded(self, *, xt: torch.Tensor, mask: torch.Tensor):
         """Applies the embedding to a ragged batch of queries and keys.

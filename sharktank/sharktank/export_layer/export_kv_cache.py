@@ -100,8 +100,8 @@ def main():
     def _(model, state, partition_0, write_page_ids: torch.Tensor) -> torch.Tensor:
         old_state = state
         if args.sharding > 1:
-            state = [SplitPrimitiveTensor(ts=state, shard_dim=alloc[0].shard_dim)]
-            partition_0 = SplitPrimitiveTensor(ts=partition_0, shard_dim=2)
+            state = [SplitPrimitiveTensor(shards=state, shard_dim=alloc[0].shard_dim)]
+            partition_0 = SplitPrimitiveTensor(shards=partition_0, shard_dim=2)
             write_page_ids = replicate(write_page_ids, count=args.sharding)
         cache.write(
             state,

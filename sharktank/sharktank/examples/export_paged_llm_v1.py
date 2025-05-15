@@ -188,12 +188,14 @@ def main():
         return [
             (
                 SplitPrimitiveTensor(
-                    ts=c,
+                    shards=c,
                     shard_dim=shard_dim,
                     devices=pipeline_to_device_map[pipeline],
                 )
                 if len(c) > 1
-                else ReplicatedTensor(ts=c, devices=pipeline_to_device_map[pipeline])
+                else ReplicatedTensor(
+                    shards=c, devices=pipeline_to_device_map[pipeline]
+                )
             )
             for pipeline, c in enumerate(cache)
         ]
