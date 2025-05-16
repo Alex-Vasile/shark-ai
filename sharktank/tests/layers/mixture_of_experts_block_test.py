@@ -147,6 +147,7 @@ class MoeBlockTest(unittest.TestCase):
         from sharktank.layers import MoeBlock
 
         theta = make_random_moe_block_theta(
+            block_idx=0,
             in_dim=feature_dim,
             expert_hidden_dim=expert_hidden_dim,
             num_experts=num_experts,
@@ -213,7 +214,7 @@ class MoeBlockTest(unittest.TestCase):
             param(
                 dtype=torch.bfloat16,
                 feature_dim=2,
-                expert_hidden_dim=6,
+                expert_hidden_dim=10,
                 num_experts=9,
                 n_expert_groups=3,
                 n_limited_groups=3,
@@ -254,6 +255,7 @@ class MoeBlockTest(unittest.TestCase):
         from sharktank.layers import MoeBlock
 
         theta = make_random_moe_block_theta(
+            block_idx=0,
             in_dim=feature_dim,
             expert_hidden_dim=expert_hidden_dim,
             num_experts=num_experts,

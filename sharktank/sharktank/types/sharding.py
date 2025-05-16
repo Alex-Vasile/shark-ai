@@ -9,6 +9,8 @@ sharded."""
 
 from typing import TYPE_CHECKING, Optional
 
+from typing import TYPE_CHECKING, Optional
+
 from abc import ABC, abstractmethod
 from sharktank.utils import tree
 from sharktank.types.theta import Theta, flat_to_nested_dict
@@ -270,19 +272,17 @@ class LatentAttentionBlockSharding(ThetaLayerSharding):
                 "attn_kv_a_norm": RmsNormReplicatedSharding(
                     self.shard_count
                 ).theta_sharding(),
-                "attn_q_a": LinearReplicatedWeightAndBiasSharding(
+                "attn_q_a": LinearSplitParallelWeightAndBiasSharding(
                     shard_count=self.shard_count
                 ).theta_sharding(),
                 "attn_q_b": LinearSplitReductionDimSharding(
                     shard_count=self.shard_count,
-                    reduction_dim=1,
                 ).theta_sharding(),
-                "attn_kv_a_mqa": LinearReplicatedWeightAndBiasSharding(
+                "attn_kv_a_mqa": LinearSplitParallelWeightAndBiasSharding(
                     shard_count=self.shard_count
                 ).theta_sharding(),
-                "attn_kv_b": LinearSplitReductionDimSharding(
+                "attn_kv_b": LinearSplitParallelWeightAndBiasSharding(
                     shard_count=self.shard_count,
-                    reduction_dim=1,
                 ).theta_sharding(),
                 "attn_output": LinearSplitReductionDimSharding(
                     shard_count=self.shard_count
