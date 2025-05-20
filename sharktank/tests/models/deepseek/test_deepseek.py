@@ -14,6 +14,7 @@ from sharktank.models.deepseek.toy_deepseek import generate
 from sharktank.utils.load_llm import *
 from sharktank.utils.evaluate import *
 
+
 class DeepseekTest(unittest.TestCase):
     def test_deepseek(self):
         theta, config = generate(12345)
