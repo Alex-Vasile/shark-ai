@@ -389,6 +389,10 @@ class PerplexityIree:
         self.token_ids = torch.as_tensor(token_ids, device=self.torch_device)
 
         out_logits = self.get_logits(skip_decode)
+        torch.save(
+            out_logits,
+            "/home/alvasile/repos/shark-ai/sharktank/logits/iree_pp_w_mask.pt",
+        )
 
         logger.debug(f"Final Logits shape: {out_logits.shape}")
         logger.debug(f"Token ids shape: {self.token_ids.shape}")
@@ -406,7 +410,10 @@ def run_perplexity_iree(
 ) -> dict[str, Any]:
     start = time.time()
 
-    test_prompts = args.prompt_list or get_prompts(num_prompts=args.num_prompts)
+    # test_prompts = args.prompt_list or get_prompts(num_prompts=args.num_prompts)
+
+    with open("/home/alvasile/repos/shark-ai/short_prompts.json", "r") as f:
+        test_prompts = json.load(f)["prompts"]
 
     perplexity = PerplexityIree(
         torch_device=torch_device,
