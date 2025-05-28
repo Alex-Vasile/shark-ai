@@ -66,6 +66,7 @@ class TorchGenerator:
         page_cache_size: int = None,
         dump_path: Path = None,
         dump_decode_steps: int = None,
+        use_attention_mask: bool = True,
     ):
         bs = token_ids.shape[0]
 
@@ -86,6 +87,7 @@ class TorchGenerator:
             bs=bs,
             dump_path=dump_path,
             dump_decode_steps=dump_decode_steps,
+            use_attention_mask=use_attention_mask,
         )
 
     def alloc_page(self) -> int:
@@ -105,6 +107,7 @@ class Batch:
         bs: int,
         dump_path: Path,
         dump_decode_steps: int,
+        use_attention_mask: bool,
     ):
         self.bs = bs
         assert seq_lens.shape[0] == self.bs
@@ -118,6 +121,7 @@ class Batch:
         self.dump_path = dump_path
         self.dump_decode_steps = dump_decode_steps
         self.decode_step = 0
+        self.use_attention_mask = use_attention_mask
 
         # Assemble the batch.
         seq_stride = self.parent.block_seq_stride
@@ -206,9 +210,12 @@ class Batch:
 
     def prefill(self):
         model = self.parent.model
-        attention_mask = model.attention_mask(
-            model.input_mask(self.seq_lens, self.token_ids.shape[1])
-        )
+        if self.use_attention_mask:
+            attention_mask = model.attention_mask(
+                model.input_mask(self.seq_lens, self.token_ids.shape[1])
+            )
+        else:
+            attention_mask = None
         seq_block_ids = self.pad_block_ids()
         trace_tensor("prefill.token_ids", self.token_ids)
         trace_tensor("prefill.seq_block_ids", seq_block_ids)
@@ -265,6 +272,11 @@ class Batch:
         )
 
         self.prefill_logits = unshard(self.prefill_logits)
+
+        save_name = f"eager_wo_prefill_logits.pt"
+        if attention_mask:
+            save_name = "eager_wo_prefill_logits.pt"
+        torch.save(self.prefill_logits, save_name)
 
         # TODO: Generalize the sampling and don't make it swap on/off cpu.
         # TODO: Normalize the output of extract_tokens_from_logits into
