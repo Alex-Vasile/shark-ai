@@ -136,12 +136,12 @@ class SaveModuleResultTensorsPatch(Patch):
             self._add_tensor(name=name_prefix, tensor=tensors)
         elif isinstance(tensors, Mapping):
             for k, v in tensors.items():
-                self._add_nested_tensor(
+                self._add_nested_tensors(
                     f"{name_prefix}{name_delimiter}{k}", v, name_delimiter
                 )
         elif isinstance(tensors, Iterable):
             for i, v in enumerate(tensors):
-                self._add_nested_tensor(
+                self._add_nested_tensors(
                     f"{name_prefix}{name_delimiter}{i}", v, name_delimiter
                 )
         else:
