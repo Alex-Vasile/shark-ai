@@ -176,7 +176,7 @@ class PagedLlmModelV1(BaseCausalLMModel):
         cache_state: list[Union[torch.Tensor, SplitPrimitiveTensor]],
     ):
         self._assert_device(tokens)
-        self._assert_device(*attention_mask, dtype=self.activation_dtype)
+        # self._assert_device(*attention_mask, dtype=self.activation_dtype)
         self._assert_device(*seq_block_ids)
         self._assert_device(*cache_state, dtype=self.activation_dtype)
 
