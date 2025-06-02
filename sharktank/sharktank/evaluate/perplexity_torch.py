@@ -9,6 +9,7 @@ import sys
 import logging
 import time
 from datetime import timedelta
+from datetime import timedelta
 import json
 import numpy as np
 from tqdm import tqdm
@@ -47,11 +48,11 @@ class PerplexityTorch:
 
     def __init__(
         self,
-        use_toy_model: bool = False,
         use_attention_mask: bool = True,
+        use_toy_model: bool = False,
     ):
-        self.use_toy_model = use_toy_model
         self.use_attention_mask = use_attention_mask
+        self.use_toy_model = use_toy_model
 
     def calc_time(self, start, end):
         total_seconds = end - start
@@ -276,7 +277,6 @@ class PerplexityTorch:
             ) * len(test_prompts) + 1
 
         self.max_prompt_length = max(self.seq_lens)
-        self.seq_lens = torch.tensor(self.seq_lens, device=self.device)
 
         self.token_ids = torch.tensor(self.token_ids, device=self.device)
 
@@ -295,7 +295,6 @@ def run_perplexity_torch(
     device: torch.device | None,
     tensor_parallelism_size: int,
     pipeline_parallelism_size: int,
-    model_file,
 ):
 
     start = time.time()
@@ -316,10 +315,11 @@ def run_perplexity_torch(
             test_prompts[idx : idx + bs] for idx in range(0, len(test_prompts), bs)
         ]
 
+    model_file = args.gguf_file or args.irpa_file
     perplexity_batch = []
     for p in tqdm(
         input_prompts,
-        desc=f"eval: Calculating logits for {model_file.name}",
+        desc=f"eval_torch: Calculating logits for {model_file.name}",
     ):
         perplexity_batch.extend(
             perplexity_torch(
@@ -340,6 +340,7 @@ def run_perplexity_torch(
                 skip_decode=args.skip_decode,
                 use_toy_model=args.use_toy_model,
                 use_attention_mask=args.use_attention_mask,
+                use_toy_model=args.use_toy_model,
             )
         )
 
@@ -377,10 +378,10 @@ def perplexity_torch(
     skip_decode,
     use_toy_model,
     use_attention_mask: bool,
+    use_toy_model,
 ):
-
     perplexity = PerplexityTorch(
-        use_toy_model=use_toy_model, use_attention_mask=use_attention_mask
+        use_attention_mask=use_attention_mask, use_toy_model=use_toy_model
     )
 
     perplexity.load_model(
@@ -426,7 +427,6 @@ def main(argv):
 
     logger.setLevel(args.loglevel)
     device = torch.device(args.device) if args.device else None
-    model_file = args.gguf_file or args.irpa_file
 
     assert args.num_prompts or args.prompt_list, "Pass --num-prompts or --prompt-list"
 
@@ -444,7 +444,6 @@ def main(argv):
         device=device,
         tensor_parallelism_size=tensor_parallelism_size,
         pipeline_parallelism_size=args.pipeline_parallelism_size,
-        model_file=model_file,
     )
 
     logger.info(f"\n{json.dumps(ppl, indent=2)}")
