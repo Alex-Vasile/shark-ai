@@ -367,16 +367,17 @@ class PerplexityIree:
             weight_path = Path(self.weight_path_str)
             parameter_index = iree.runtime.ParameterIndex()
             if shard_count == 1:
-                parameter_index.load(file_path=str(Path(weight_path)))
+                f = open(weight_path, "rb")
+                handle = iree.runtime.FileHandle.wrap_fd(f.fileno())
+                parameter_index.load_from_file_handle(handle, "irpa")
             else:
                 for i in range(shard_count):
-                    parameter_index.load(
-                        file_path=str(
-                            Path(weight_path).with_suffix(
-                                f".rank{i}{weight_path.suffix}"
-                            )
-                        )
+                    f = open(
+                        weight_path.with_suffix(f".rank{i}{weight_path.suffix}"),
+                        "rb",
                     )
+                    handle = iree.runtime.FileHandle.wrap_fd(f.fileno())
+                    parameter_index.load_from_file_handle(handle, "irpa")
 
             parameter_provider = parameter_index.create_provider(scope="model")
             parameters_module = iree.runtime.create_io_parameters_module(
