@@ -61,7 +61,7 @@ eager_result = model.forward(attn_output)
 dynamic = torch.export.Dim("dynamic")
 
 dynamic_shapes = {
-    "attn_output": {1: dynamic},  # , 1: input_feature_dim},
+    "attn_output": {2: dynamic},  # , 1: input_feature_dim},
 }
 
 # Run through IREE
@@ -71,7 +71,7 @@ fxb = FxProgramsBuilder(model)
 @fxb.export_program(
     name="scatter",
     args=(attn_output,),
-    # dynamic_shapes=dynamic_shapes,
+    dynamic_shapes=dynamic_shapes,
     strict=False,
 )
 def _(model, attn_output) -> torch.Tensor:
