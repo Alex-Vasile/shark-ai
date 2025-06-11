@@ -268,6 +268,8 @@ class PagedLlamaAttentionBlock(ThetaLayer):
         if self.attn_type == "mla" and self.head_dim != self.v_head_dim:
             xv = ops.pad(xv, [0, self.head_dim - self.v_head_dim])
 
+        # attn_output = xv.transpose(1, 2)
+
         if start_positions is None:
             attn_output = self.paged_attention.forward_prefill(
                 q=xq,
@@ -304,20 +306,24 @@ class PagedLlamaAttentionBlock(ThetaLayer):
                 k_quantizer=self.k_quantizer,
                 v_quantizer=self.v_quantizer,
             )
+
         # attn_output is sharded
         # Drop padded part of attn_output
-        if self.attn_type == "mla" and self.head_dim != self.v_head_dim:
-            attn_output = attn_output[:, :, :, : self.v_head_dim]
+        # if self.attn_type == "mla" and self.head_dim != self.v_head_dim:
+        # attn_output = attn_output[:, :, :, : self.v_head_dim]
 
-        attn_output = attn_output.transpose(1, 2)
+        # attn_output = attn_output.transpose(1, 2)
 
-        if self.attn_type == "mla":
-            attn_output = attn_output.flatten(2)
-        else:
-            attn_output = attn_output.flatten(2, 3)
+        # if self.attn_type == "mla":
+        # attn_output = attn_output.flatten(2)
+        # else:
+        # attn_output = attn_output.flatten(2, 3)
 
         # Project.
-        attn_output = self.attn_output(attn_output)
+        attn_output = ops.linear(attn_output, attn_output[..., : attn_output.shape[-1]])
+        # attn_output = self.attn_output(attn_output)
+
+        return attn_output
         attn_output = self.attn_output_norm(attn_output)
 
         h = h + attn_output

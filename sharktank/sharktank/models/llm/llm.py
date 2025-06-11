@@ -201,17 +201,17 @@ class PagedLlmModelV1(BaseCausalLMModel):
             h = self._inter_layer_callback(h, block_idx)
             self.trace_tensor(f"llama.attn_block.{block_idx}.output", h)
 
-        h = h.to(self.config.activation_dtype)
-        h = self.output_norm(h)
-        logits = self.output_lm_head(h)
+        # h = h.to(self.config.activation_dtype)
+        # h = self.output_norm(h)
+        # logits = self.output_lm_head(h)
 
-        if self.inference_norm:
-            logits = logits / math.sqrt(3.0)
+        # if self.inference_norm:
+        #     logits = logits / math.sqrt(3.0)
 
-        if "float8" in str(logits.dtype) or logits.dtype == torch.bfloat16:
-            return logits.to(dtype=torch.float16)
+        # if "float8" in str(logits.dtype) or logits.dtype == torch.bfloat16:
+        #     return logits.to(dtype=torch.float16)
 
-        return logits
+        return h
 
     def decode(
         self,
@@ -465,9 +465,9 @@ class AttentionFFNBlock(ThetaLayer):
         )
 
         # Feed forward network.
-        final_output = self.ffn(self.ffn_norm(h))
+        # final_output = self.ffn(self.ffn_norm(h))
 
-        if self.add_residual:
-            final_output = h + final_output
+        # if self.add_residual:
+        #     final_output = h + final_output
 
-        return final_output
+        return h
