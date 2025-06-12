@@ -82,7 +82,7 @@ class DeepseekTest(TempDirTestBase):
         assert pytest.approx(9.7477, 1e-4) == cross_entropy
 
     def testUnshardedToySizedModelIREEVsEager(self):
-        work_dir = self._temp_dir
+        work_dir = Path("/home/alvasile/repos/shark-ai/sharktank/ireevseager")
         theta, config = generate(12345)
         # config.device = "cuda:5"
 
@@ -116,13 +116,15 @@ class DeepseekTest(TempDirTestBase):
         reference_logits = reference_batch.prefill_logits
         ref_cache_state_after = deepcopy(reference_batch.cache_state)
 
-        np.save(work_dir / "reference_logits.npy", reference_logits.cpu().numpy())
+        np.save(work_dir / "results_reference.npy", reference_logits.cpu().numpy())
+        reference_logits = torch.tensor(np.load(work_dir / "results_reference.npy"))
 
         iree_cache = create_paged_kv_cache(config)
         iree_cache_state = iree_cache.shard_state(deepcopy(cache_state_before_prefill))
 
-        mlir_path = work_dir / "failing.mlir"
-        export_config_path = work_dir / "model_export_config.json"
+        case = "failing"
+        mlir_path = work_dir / f"{case}.mlir"
+        export_config_path = work_dir / f"{case}_export_config.json"
         export_artifacts = ExportArtifacts.from_config(
             config,
             irpa_path=dataset_path,
@@ -137,7 +139,7 @@ class DeepseekTest(TempDirTestBase):
             skip_decode=True,  # TODO: enable decode
         )
 
-        iree_module_path = work_dir / "model.vmfb"
+        iree_module_path = work_dir / f"{case}.vmfb"
         export_artifacts.compile_to_vmfb(
             output_mlir=mlir_path,
             output_vmfb=iree_module_path,
@@ -157,12 +159,18 @@ class DeepseekTest(TempDirTestBase):
         iree_cache_state_path = work_dir / "iree_cache_state.npy"
 
         np.save(token_ids_path, token_ids.cpu().numpy())
+        token_ids = torch.tensor(np.load(token_ids_path))
         np.save(seq_lens_path, seq_lens.cpu().numpy())
+        seq_lens = torch.tensor(np.load(seq_lens_path))
         np.save(
             seq_block_ids_before_prefill_path,
             seq_block_ids_before_prefill.cpu().numpy(),
         )
+        seq_block_ids_before_prefill = torch.tensor(
+            np.load(seq_block_ids_before_prefill_path)
+        )
         np.save(iree_cache_state_path, iree_cache_state[0].cpu().numpy())
+        iree_cache_state = torch.tensor(np.load(iree_cache_state_path))
 
         def run_iree_module(iree_devices: list[iree.runtime.HalDevice]):
             cpu_device = get_iree_devices(driver="local-task", device_count=1)
@@ -198,10 +206,10 @@ class DeepseekTest(TempDirTestBase):
             iree_logits = iree_result[0]
             return iree_logits
 
-        iree_logits_w_py = with_iree_device_context(run_iree_module, iree_devices)
+        # iree_logits_w_py = with_iree_device_context(run_iree_module, iree_devices)
         iree_cache_state_after = deepcopy(iree_cache_state)
 
-        np.save(work_dir / "iree_logits_w_py.npy", iree_logits_w_py.cpu().numpy())
+        # np.save(work_dir / "iree_logits_w_py.npy", iree_logits_w_py.cpu().numpy())
 
         run_args = [
             "iree-run-module",
@@ -214,7 +222,7 @@ class DeepseekTest(TempDirTestBase):
             f"--input=@{seq_lens_path}",
             f"--input=@{seq_block_ids_before_prefill_path}",
             f"--input=@{iree_cache_state_path}",
-            "--output=@iree_logits.npy",
+            f"--output=@results_{case}.npy",
         ]
         cmd = subprocess.list2cmdline(run_args)
         print(f" Launching run command:\n" f"cd {work_dir} && {cmd}")
@@ -223,12 +231,38 @@ class DeepseekTest(TempDirTestBase):
         if return_code != 0:
             raise IreeBenchmarkException(proc, work_dir)
 
-        iree_logits_cli = torch.tensor(np.load(work_dir / "iree_logits.npy"))
+        iree_logits_cli = torch.tensor(np.load(work_dir / f"results_{case}.npy"))
 
         # Compare cache state
-        print(
-            f"Number of mismatched logits:{(~torch.isclose(reference_logits, iree_logits_w_py, rtol=1.3e-6, atol=1e-5)).sum().item()}"
-        )
+        # print(
+        # f"Number of mismatched logits: {(~torch.isclose(reference_logits, iree_logits_w_py, rtol=1.3e-6, atol=1e-5)).sum().item()}"
+        # )
+
+        def f(x1: torch.Tensor, x2: torch.Tensor) -> None:
+            diff = torch.abs(x1 - x2)
+            i_max = diff.argmax()
+            v_max = diff.flatten()[i_max].item()
+            print(f"Max absolute diff: {v_max:.5e}")
+            base_value = torch.abs(x1.flatten()[i_max]).item()
+            if base_value:
+                print(f"Max relative diff: {v_max / base_value:.5e}")
+            else:
+                print("Max relative diff: undefined (division by zero)")
+
+        assert iree_logits_cli.shape == reference_logits.shape
+        attni, hi = iree_logits_cli[..., :32], iree_logits_cli[..., 32:]
+        attnr, hr = reference_logits[..., :32], reference_logits[..., 32:]
+
+        print("attn_output")
+        f(attnr, attni)
+        print("hidden_states")
+        f(hr, hi)
+        # diff = torch.abs(reference_logits - iree_logits_w_py)
+        # i_max = diff.argmax()
+
+        # print(f"Max absolute diff: {diff.flatten()[i_max].item():.5e}")
+        # print(f"Max relative diff: {diff.flatten()[i_max].item() / torch.abs(reference_logits.flatten()[i_max]).item():.5e}")
+
         assert len(iree_cache_state_after) == len(ref_cache_state_after)
         for ref_state_i, iree_state_i in zip(
             ref_cache_state_after, iree_cache_state_after
