@@ -1,7 +1,6 @@
 from pathlib import Path
 import subprocess
 import numpy as np
-import iree
 import torch
 
 """
@@ -30,16 +29,18 @@ In both cases, the value we're concatting should not affect the value of `a`.
 **The addition also produces errors, but the concat was easier to track down.**
 """
 
-work_dir = Path("ireevseager").absolute()
+work_dir = Path(".").absolute()
 
 token_ids_path = work_dir / "token_ids.npy"
 seq_lens_path = work_dir / "seq_lens.npy"
 seq_block_ids_before_prefill_path = work_dir / "seq_block_ids_before_prefill.npy"
 iree_cache_state_path = work_dir / "iree_cache_state.npy"
-
+results_reference_path = work_dir / "results_reference.npy"
+results_failing_path = work_dir / "results_failing.npy"
+results_passing_path = work_dir / "results_passing.npy"
 
 # Compile and run both cases
-for case in ["passing"]:
+for case in ["failing", "passing"]:
     compile_args = [
         "iree-compile",
         f"{case}.mlir",
@@ -52,7 +53,7 @@ for case in ["passing"]:
         "--iree-hal-memoization=true",
     ]
     cmd = subprocess.list2cmdline(compile_args)
-    print(f" Launching run command:\n" f"cd {work_dir} && {cmd}")
+    print(f"Compile command:\n" f"cd {work_dir} && {cmd}")
     proc = subprocess.run(cmd, shell=True, capture_output=True, cwd=work_dir)
 
     run_args = [
@@ -66,47 +67,41 @@ for case in ["passing"]:
         f"--input=@{seq_lens_path}",
         f"--input=@{seq_block_ids_before_prefill_path}",
         f"--input=@{iree_cache_state_path}",
-        f"--output=@results_{case}.npy",
+        f"--output=@{work_dir / f'results_{case}'}.npy",
     ]
     cmd = subprocess.list2cmdline(run_args)
-    print(f" Launching run command:\n" f"cd {work_dir} && {cmd}")
+    print(f"Run command:\n" f"cd {work_dir} && {cmd}")
     proc = subprocess.run(cmd, shell=True, capture_output=True, cwd=work_dir)
+    print(proc)
 
 
 # Load reference results an passing & failing mlir results
+split_res = lambda res: (res[..., :32], res[..., 32:])
+## .npy stores torch.cat((a, b), dim=-1)
+a_ref, b_ref = split_res(torch.tensor(np.load(results_reference_path)))
+## .npy stores torch.cat((a, b), dim=-1)
+a_fail, b_fail = split_res(torch.tensor(np.load(results_failing_path)))
+## .npy stores torch.cat((a, a), dim=-1)
+a_pass1, a_pass2 = split_res(torch.tensor(np.load(results_passing_path)))
+
+# Compare results
 def f(x1: torch.Tensor, x2: torch.Tensor) -> None:
     diff = torch.abs(x1 - x2)
     i_max = diff.argmax()
     v_max = diff.flatten()[i_max].item()
-    print(f"\tMax absolute diff: {v_max:.5e}")
+    print(f"\tMax abs diff: {v_max:.3e}")
     base_value = torch.abs(x1.flatten()[i_max]).item()
     if base_value:
-        print(f"\tMax relative diff: {v_max / base_value:.5e}")
+        print(f"\tMax rel diff: {v_max / base_value:.3e}")
     else:
-        print("\tMax relative diff: undefined (division by zero)")
+        print("\tMax rel diff: undefined (division by zero)")
 
 
-split_res = lambda res: (res[..., :32], res[..., 32:])
-## .npy stores torch.cat((a, b), dim=-1)
-a_ref, b_ref = split_res(torch.tensor(np.load(work_dir / "results_reference.npy")))
-## .npy stores torch.cat((a, b), dim=-1)
-a_fail, b_fail = split_res(torch.tensor(np.load(work_dir / "results_failing.npy")))
-## .npy stores torch.cat((a, a), dim=-1)
-a_pass1, a_pass2 = split_res(torch.tensor(np.load(work_dir / "results_passing.npy")))
-
-print("Reference results a1")
+print("PASSING: a1")
 f(a_ref, a_pass1)
-print("Reference results a2")
+print("PASSING: a2")
 f(a_ref, a_pass2)
-print("Failing results a")
+print("FAILING: a")
 f(a_ref, a_fail)
-print("Failing results b")
+print("FAILING: b")
 f(b_ref, b_fail)
-# Compare results
-## Passing case
-torch.testing.assert_close(a_ref, a_pass1, rtol=0, atol=1e-3)
-torch.testing.assert_close(a_ref, a_pass2, rtol=0, atol=1e-3)
-
-## Failing case
-torch.testing.assert_close(b_ref, b_fail, rtol=0, atol=1e-3)  # This one passes
-torch.testing.assert_close(a_ref, a_fail, rtol=0, atol=1e-3)  # This one fails
