@@ -309,22 +309,22 @@ class PagedLlamaAttentionBlock(ThetaLayer):
 
         # attn_output is sharded
         # Drop padded part of attn_output
-        # if self.attn_type == "mla" and self.head_dim != self.v_head_dim:
-        # attn_output = attn_output[:, :, :, : self.v_head_dim]
+        if self.attn_type == "mla" and self.head_dim != self.v_head_dim:
+            attn_output = attn_output[:, :, :, : self.v_head_dim]
 
-        # attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.transpose(1, 2)
 
-        # if self.attn_type == "mla":
-        # attn_output = attn_output.flatten(2)
-        # else:
-        # attn_output = attn_output.flatten(2, 3)
+        if self.attn_type == "mla":
+            attn_output = attn_output.flatten(2)
+        else:
+            attn_output = attn_output.flatten(2, 3)
 
         # Project.
         attn_output = ops.linear(attn_output, attn_output[..., : attn_output.shape[-1]])
+        # return attn_output
         # attn_output = self.attn_output(attn_output)
-
-        return attn_output
-        attn_output = self.attn_output_norm(attn_output)
-
-        h = h + attn_output
-        return h
+        # return attn_output
+        # torch.cat((attn_output, attn_output2), dim=-1)
+        # attn_output = self.attn_output_norm(attn_output)
+        # h = h + attn_output
+        return torch.cat((attn_output, h), dim=-1)
