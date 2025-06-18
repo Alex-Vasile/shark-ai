@@ -61,7 +61,7 @@
 | sharktank/sharktank/models/deepseek/testing.py                                |       22 |        0 |    100% |           |
 | sharktank/sharktank/models/deepseek/toy\_deepseek.py                          |       35 |        9 |     74% | 83-93, 97 |
 | sharktank/sharktank/models/dummy/\_\_init\_\_.py                              |        1 |        0 |    100% |           |
-| sharktank/sharktank/models/dummy/dummy.py                                     |       39 |        0 |    100% |           |
+| sharktank/sharktank/models/dummy/dummy.py                                     |       40 |        0 |    100% |           |
 | sharktank/sharktank/models/flux/\_\_init\_\_.py                               |        1 |        0 |    100% |           |
 | sharktank/sharktank/models/flux/compile.py                                    |        1 |        0 |    100% |           |
 | sharktank/sharktank/models/flux/export.py                                     |       55 |       24 |     56% |35-36, 56, 80, 95-98, 104-127 |
@@ -205,7 +205,7 @@
 | sharktank/tests/utils/patching\_test.py                                       |       44 |        0 |    100% |           |
 | sharktank/tests/utils/testing\_test.py                                        |       63 |        3 |     95% |   226-238 |
 | sharktank/tests/utils/tree\_test.py                                           |       20 |        0 |    100% |           |
-|                                                                     **TOTAL** | **19256** | **3867** | **80%** |           |
+|                                                                     **TOTAL** | **19257** | **3867** | **80%** |           |
 
 
 ## Setup coverage badge
