@@ -463,6 +463,7 @@ class AttentionFFNBlock(ThetaLayer):
             embedding_batch_mask=embedding_batch_mask,
             cache_state=cache_state,
         )
+        return h
 
         # Feed forward network.
         final_output = self.ffn(self.ffn_norm(h))
