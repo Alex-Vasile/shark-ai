@@ -41,7 +41,7 @@ def generate(seed: int) -> tuple[Theta, LlamaModelConfig]:
             vocab_size=vocabulary_size,
             context_length=block_seq_stride * max_blocks,
             embedding_length=32,
-            block_count=4,
+            block_count=1,
             feed_forward_length=23,
             attention_head_count=4,
             attn_head_dim=attn_head_dim,
