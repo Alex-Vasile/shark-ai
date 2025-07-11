@@ -19,6 +19,8 @@ import unittest
 from typing import List, Optional
 import os
 
+from sharktank.utils.testing import assert_tensor_close
+
 
 def test_sharded_rotary_table():
     bs = 4
@@ -54,5 +56,5 @@ def test_sharded_rotary_table():
     sq = ops.unshard(sq)
     sk = ops.unshard(sk)
 
-    torch.testing.assert_close(sq, oq)
-    torch.testing.assert_close(sk, ok)
+    assert_tensor_close(sq, oq)
+    assert_tensor_close(sk, ok)
