@@ -284,6 +284,22 @@ class ExportArtifacts:
         output_irpa = irpa_path.with_name(f"{irpa_path.stem}_sharded{irpa_path.suffix}")
         self.irpa_path = output_irpa
 
+        args = [
+            f"--irpa-file={irpa_path}",
+            f"--output-irpa-file={output_irpa}",
+            f"--tensor-parallelism-size={self.tensor_parallelism_size}",
+        ]
+        # TODO: How to run this in self.cwd?
+        from sharktank.examples.sharding import shard_llm_dataset
+
+        try:
+            run_msg = "Sharding irpa file"
+            logger.info(f"{run_msg}:\n" f"cd {self.cwd} && {cmd}")
+            shard_llm_dataset.main(args)
+        except Exception as e:
+            raise IrpaShardException(self.cwd) from e
+        return
+
         shard_irpa_args = [
             "python3",
             "-m",
