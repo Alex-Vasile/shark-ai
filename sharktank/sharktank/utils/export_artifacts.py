@@ -293,31 +293,17 @@ class ExportArtifacts:
         from sharktank.examples.sharding import shard_llm_dataset
 
         try:
+            self.cw
             run_msg = "Sharding irpa file"
-            logger.info(f"{run_msg}:\n" f"cd {self.cwd} && {cmd}")
-            shard_llm_dataset.main(args)
+            logger.info(f"{run_msg} with arg: {''.join(args)}")
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(self.cwd)
+                shard_llm_dataset.main(args)
+            finally:
+                os.chdir(original_cwd)
         except Exception as e:
             raise IrpaShardException(self.cwd) from e
-        return
-
-        shard_irpa_args = [
-            "python3",
-            "-m",
-            "sharktank.examples.sharding.shard_llm_dataset",
-            "--irpa-file",
-            irpa_path,
-            "--output-irpa-file",
-            output_irpa,
-            "--tensor-parallelism-size",
-            str(self.tensor_parallelism_size),
-        ]
-
-        self._run_cmd(
-            cmd=subprocess.list2cmdline(shard_irpa_args),
-            run_msg="Sharding irpa file",
-            success_msg="Sharded irpa file successfully",
-            exception=IrpaShardException,
-        )
 
     @timeit
     def export_llm_to_mlir(
