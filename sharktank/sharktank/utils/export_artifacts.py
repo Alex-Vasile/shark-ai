@@ -11,7 +11,7 @@ import logging
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -260,6 +260,33 @@ class ExportArtifacts:
         else:
             logger.info(f"{success_msg}:\n" f"{proc.stdout}")
 
+    def _run_function(
+        self,
+        function: Callable,
+        args: List[str],
+        run_msg: str,
+        exception: ExportArtifactsException,
+    ) -> None:
+        """
+        Helper function to run a shard/export/compile/run function and handle exceptions.
+
+        Args:
+            cmd: The command to run as a string.
+            run_msg: Message to log before running the command.
+            exception: The exception class to raise if the command fails.
+        """
+
+        try:
+            logger.info(f"{run_msg} with arg: {''.join(args)}")
+            original_cwd = os.getcwd()
+            try:
+                os.chdir(self.cwd)
+                function(args)
+            finally:
+                os.chdir(original_cwd)
+        except Exception as e:
+            raise exception(self.cwd) from e
+
     def timeit(func):
         def wrapper(*args, **kwargs):
             start = time.time_ns()
@@ -289,22 +316,14 @@ class ExportArtifacts:
             f"--output-irpa-file={output_irpa}",
             f"--tensor-parallelism-size={self.tensor_parallelism_size}",
         ]
-        # TODO: How to run this in self.cwd?
-        from sharktank.examples.sharding import shard_llm_dataset
+        from sharktank.examples.sharding.shard_llm_dataset import main
 
-        function = shard_llm_dataset.main
-        try:
-            self.cw
-            run_msg = "Sharding irpa file"
-            logger.info(f"{run_msg} with arg: {''.join(args)}")
-            original_cwd = os.getcwd()
-            try:
-                os.chdir(self.cwd)
-                function(args)
-            finally:
-                os.chdir(original_cwd)
-        except Exception as e:
-            raise IrpaShardException(self.cwd) from e
+        self._run_function(
+            function=main,
+            args=args,
+            run_msg="Sharding IRPA file",
+            exception=IrpaShardException,
+        )
 
     @timeit
     def export_llm_to_mlir(
@@ -324,17 +343,14 @@ class ExportArtifacts:
         """
 
         if self.output_mlir is not None and self.output_config is not None:
-            logger.info(f" Using pre-exported mlir: {self.output_mlir}")
-            logger.info(f" Using pre-exported config json: {self.output_config}")
+            logger.info(f"Using pre-exported mlir: {self.output_mlir}")
+            logger.info(f"Using pre-exported config json: {self.output_config}")
             return
         else:
             self.output_mlir = self.output_name.with_suffix(".mlir")
             self.output_config = self.output_name.with_suffix(".json")
 
         export_args = [
-            "python3",
-            "-m",
-            "sharktank.examples.export_paged_llm_v1",
             f"--irpa-file={self.irpa_path}",
             f"--output-mlir={self.output_mlir}",
             f"--output-config={self.output_config}",
@@ -345,9 +361,8 @@ class ExportArtifacts:
             f"--activation-dtype={self.activation_dtype}",
             f"--tensor-parallelism-size={self.tensor_parallelism_size}",
             f"--pipeline-parallelism-size={self.pipeline_parallelism_size}",
+            f"--attention-kernel={self.attention_kernel}",
         ]
-
-        export_args.append(f"--attention-kernel={self.attention_kernel}")
 
         if self.kv_cache_dtype is not None:
             export_args.append(f"--kv-cache-dtype={self.kv_cache_dtype}")
@@ -362,10 +377,12 @@ class ExportArtifacts:
         if self.attention_chunk_size:
             export_args.append(f"--attention-chunk-size={self.attention_chunk_size}")
 
-        self._run_cmd(
-            cmd=subprocess.list2cmdline(export_args),
-            run_msg="Exporting MLIR",
-            success_msg="Exported to MLIR successfully",
+        from sharktank.examples.export_paged_llm_v1 import main
+
+        self._run_function(
+            function=main,
+            args=export_args,
+            run_msg="Exporting LLM to MLIR",
             exception=ExportMlirException,
         )
 
@@ -393,9 +410,12 @@ class ExportArtifacts:
             self.output_vmfb = self.output_name.with_suffix(".vmfb")
 
         compile_args = [
-            f"iree-compile",
             f"{self.output_mlir}",
             f"-o={self.output_vmfb}",
+            "--iree-opt-level=O3",
+            "--iree-hal-indirect-command-buffers=true",
+            "--iree-stream-resource-memory-model=discrete",
+            "--iree-hal-memoization=true",
         ]
         compile_args += get_iree_compiler_flags_from_object(
             self, device_count=self.parallelism_size
@@ -404,13 +424,6 @@ class ExportArtifacts:
             compile_args += [
                 f"--iree-hal-dump-executable-files-to={hal_dump_path}/files"
             ]
-
-        compile_args += [
-            "--iree-opt-level=O3",
-            "--iree-hal-indirect-command-buffers=true",
-            "--iree-stream-resource-memory-model=discrete",
-            "--iree-hal-memoization=true",
-        ]
 
         # TODO: https://github.com/iree-org/iree/issues/21068
         if any(
