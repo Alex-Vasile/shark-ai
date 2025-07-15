@@ -36,6 +36,7 @@ class ExportArtifactsException(Exception):
     def __init__(
         self, process: subprocess.CompletedProcess, cwd: str, export_stage: str
     ):
+        {}
         try:
             errs = process.stderr.decode("utf-8")
         except:
@@ -435,6 +436,8 @@ class ExportArtifacts:
         if extra_args:
             compile_args += extra_args
 
+        # TODO: Look into oneshot_iree_run
+
         self._run_cmd(
             cmd=subprocess.list2cmdline(compile_args),
             run_msg="Launching compile command",
@@ -471,6 +474,9 @@ class ExportArtifacts:
             *extra_args,
             str(benchmark_filename),
         ]
+
+        # TODO: Use
+        from iree.runtime.benchmark import benchmark_module
 
         self._run_cmd(
             cmd=subprocess.list2cmdline(benchmark_args),
@@ -523,6 +529,8 @@ class ExportArtifacts:
             success_msg="Run completed successfully",
             exception=IreeRunException,
         )
+
+        # TODO: Look at how iree_perplexity does this
 
         return [torch.from_numpy(np.load(path)) for path in output_paths]
 
