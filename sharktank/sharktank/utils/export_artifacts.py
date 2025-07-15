@@ -292,6 +292,7 @@ class ExportArtifacts:
         # TODO: How to run this in self.cwd?
         from sharktank.examples.sharding import shard_llm_dataset
 
+        function = shard_llm_dataset.main
         try:
             self.cw
             run_msg = "Sharding irpa file"
@@ -299,7 +300,7 @@ class ExportArtifacts:
             original_cwd = os.getcwd()
             try:
                 os.chdir(self.cwd)
-                shard_llm_dataset.main(args)
+                function(args)
             finally:
                 os.chdir(original_cwd)
         except Exception as e:
