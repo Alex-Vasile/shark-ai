@@ -213,7 +213,7 @@ class InferenceTensor(ABC):
     def create(
         cls,
         name: str,
-        raw_tensors: dict[str, torch.Tensor],
+        raw_tensors: dict[str, "AnyTensor"],
         extra_properties: dict[str, Any],
     ) -> "InferenceTensor":
         raise NotImplementedError(
@@ -739,7 +739,7 @@ class DefaultPrimitiveTensor(PrimitiveTensor):
     def create(
         cls,
         name: str,
-        raw_tensors: dict[str, torch.Tensor],
+        raw_tensors: dict[str, "AnyTensor"],
         extra_properties: dict[str, Any],
     ) -> "InferenceTensor":
         try:
@@ -904,7 +904,7 @@ class PlanarQuantizedTensor(QuantizedTensor):
     def create(
         cls,
         name: str,
-        raw_tensors: dict[str, torch.Tensor],
+        raw_tensors: dict[str, "AnyTensor"],
         extra_properties: dict[str, Any],
     ) -> "InferenceTensor":
         try:
@@ -1147,7 +1147,7 @@ class ShardedTensorBase(ShardedTensor):
     def create(
         cls,
         name: str,
-        raw_tensors: dict[str, torch.Tensor],
+        raw_tensors: dict[str, "AnyTensor"],
         extra_properties: dict[str, Any],
     ) -> "InferenceTensor":
         shard_count = int(extra_properties["shard_count"])
@@ -1164,6 +1164,7 @@ class ShardedTensorBase(ShardedTensor):
                 t = raw_tensors[t_name]
                 ts.append(t)
                 # TODO: this should be changed to tracked device affinity
+                # TODO: Need to be set properly if InferenceTensor
                 DeviceTensorTrait(i).set(t)
             except KeyError as e:
                 raise IOError(
@@ -1518,7 +1519,7 @@ class ReplicatedTensor(ShardedTensor):
     def create(
         cls,
         name: str,
-        raw_tensors: dict[str, torch.Tensor],
+        raw_tensors: dict[str, "AnyTensor"],
         extra_properties: dict[str, Any],
     ) -> "InferenceTensor":
         shard_count = int(extra_properties["shard_count"])
@@ -1531,8 +1532,13 @@ class ReplicatedTensor(ShardedTensor):
                 ts.append(nt)
 
             # TODO This should be changed to assigned affinities
+            # TODO: Need to be set properly if InferenceTensor
             for i in range(shard_count):
                 DeviceTensorTrait(i).set(ts[i])
+
+            if isinstance(ts[0], InferenceTensor):
+                for j, shard in enumerate(ts):
+                    shard.name = f"{name}.shard.{j}"
 
         except KeyError as e:
             raise IOError(f"Missing component tensor '' in {raw_tensors.keys()}") from e
