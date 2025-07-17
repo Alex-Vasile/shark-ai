@@ -1164,8 +1164,12 @@ class ShardedTensorBase(ShardedTensor):
                 t = raw_tensors[t_name]
                 ts.append(t)
                 # TODO: this should be changed to tracked device affinity
-                # TODO: Need to be set properly if InferenceTensor
-                DeviceTensorTrait(i).set(t)
+                if isinstance(t, InferenceTensor):
+                    t.name = f"{name}.shard.{i}"
+                    for sub_t in t.subtensors.values():
+                        DeviceTensorTrait(i).set(sub_t)
+                else:
+                    DeviceTensorTrait(i).set(sub_t)
             except KeyError as e:
                 raise IOError(
                     f"Missing component tensor '{t_name}' in {raw_tensors.keys()}"
@@ -1532,13 +1536,13 @@ class ReplicatedTensor(ShardedTensor):
                 ts.append(nt)
 
             # TODO This should be changed to assigned affinities
-            # TODO: Need to be set properly if InferenceTensor
-            for i in range(shard_count):
-                DeviceTensorTrait(i).set(ts[i])
-
-            if isinstance(ts[0], InferenceTensor):
-                for j, shard in enumerate(ts):
-                    shard.name = f"{name}.shard.{j}"
+            for i, shard in enumerate(ts):
+                if isinstance(shard, InferenceTensor):
+                    shard.name = f"{name}.shard.{i}"
+                    for subshard in shard.subtensors.values():
+                        DeviceTensorTrait(i).set(subshard)
+                else:
+                    DeviceTensorTrait(i).set(shard)
 
         except KeyError as e:
             raise IOError(f"Missing component tensor '' in {raw_tensors.keys()}") from e
