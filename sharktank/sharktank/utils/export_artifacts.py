@@ -257,7 +257,7 @@ class ExportArtifacts:
             text=True,
         )
         if proc.returncode != 0:
-            raise exception(proc, self.cwd)
+            raise AssertionError  # exception(proc, self.cwd)
         else:
             logger.info(f"{success_msg}:\n" f"{proc.stdout}")
 
@@ -286,6 +286,7 @@ class ExportArtifacts:
             finally:
                 os.chdir(original_cwd)
         except Exception as e:
+            raise e
             raise exception(self.cwd) from e
 
     def timeit(func):
@@ -477,6 +478,8 @@ class ExportArtifacts:
 
         # TODO: Use
         from iree.runtime.benchmark import benchmark_module
+
+        timings = benchmark_module(self.output_vmfb)
 
         self._run_cmd(
             cmd=subprocess.list2cmdline(benchmark_args),
