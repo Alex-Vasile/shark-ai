@@ -9,7 +9,7 @@
 import os
 import logging
 import json
-from typing import Any, Dict, Tuple, Optional
+from typing import Any, Dict, Sequence, Tuple, Optional
 import torch
 
 from iree.turbine.aot import *
@@ -26,7 +26,7 @@ from sharktank.utils import cli
 from sharktank.models.llm import *
 
 
-def main():
+def main(args: Sequence[str] | None = None):
     parser = cli.create_parser()
 
     cli.add_input_dataset_options(parser)
@@ -35,7 +35,7 @@ def main():
     cli.add_quantization_options(parser)
     cli.add_log_options(parser)
 
-    args = cli.parse(parser)
+    args = cli.parse(parser, args=args)
 
     if args.output_mlir and args.output_mlir != "-":
         mlir_dir = os.path.dirname(args.output_mlir)
