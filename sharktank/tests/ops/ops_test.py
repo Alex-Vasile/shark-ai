@@ -496,7 +496,7 @@ class TransferAndBarrierTest(TempDirTestBase):
                 actual_count == expected_count
             ), f"Expected {expected_count} transfers to device {device_ordinal}, but found {actual_count}."
 
-    def foo(
+    def run_test(
         self,
         *,
         tensor_class: torch.Tensor.__class__ | InferenceTensor.__class__,
@@ -563,7 +563,7 @@ class TransferAndBarrierTest(TempDirTestBase):
         op: Callable[[AnyTensor, int], AnyTensor],
         tensor_class: torch.Tensor.__class__ | InferenceTensor.__class__,
     ):
-        self.foo(tensor_class=tensor_class, base_tensor=None, op=op)
+        self.run_test(tensor_class=tensor_class, base_tensor=None, op=op)
 
     @parameterized.expand(
         [
@@ -595,7 +595,7 @@ class TransferAndBarrierTest(TempDirTestBase):
         shard_type: torch.Tensor.__class__ | InferenceTensor.__class__,
     ):
         base_tensor = create_sample_tensor_from_class(shard_type)
-        self.foo(tensor_class=tensor_class, base_tensor=base_tensor, op=op)
+        self.run_test(tensor_class=tensor_class, base_tensor=base_tensor, op=op)
 
 
 class TestOpExport(unittest.TestCase):
