@@ -20,6 +20,7 @@ def build_rotary_layer(
     use_hf: bool = False,
     dtype=torch.float32,
     device: torch.device = None,
+    pipeline_to_device_map: list[list[int]] | None = None,
     **kwargs,
 ):
     rope_freq_base = 10000.0 if rope_freq_base is None else rope_freq_base
