@@ -8,7 +8,7 @@ from typing import Optional, Union
 
 import torch
 
-from sharktank.types.tensors import InferenceTensor
+from sharktank.types.tensors import InferenceTensor, ReplicatedTensor
 
 from .base import BaseLayer
 from .rotary_embedding_hf import RotaryEmbeddingLayer
@@ -42,7 +42,7 @@ class CachedRotaryLayer(BaseLayer):
     def __init__(
         self,
         *,
-        rotary_layer,
+        rotary_layer: RotaryEmbeddingLayer,
         dtype: torch.dtype,
         device: torch.device,
     ):
@@ -88,3 +88,80 @@ class CachedRotaryLayer(BaseLayer):
         mask: tuple[InferenceTensor, InferenceTensor],
     ) -> InferenceTensor:
         return self._rotary_layer(q=xt, sincos_cache=mask)
+
+
+class ReplicatedRotaryLayer(CachedRotaryLayer):
+    def __init__(
+        self,
+        *,
+        rotary_layer: RotaryEmbeddingLayer,
+        dtype: torch.dtype,
+        device: torch.device,
+        devices: list[int],
+    ):
+        super().__init__(
+            rotary_layer=rotary_layer,
+            dtype=dtype,
+            device=device,
+        )
+        assert len(devices) == 1
+        self.devices = devices
+
+    def forward(
+        self,
+        *,
+        xt: torch.Tensor,
+        start_positions: Optional[torch.Tensor] = None,
+    ):
+        ret = super().forward(
+            xt=xt,
+            start_positions=start_positions,
+        )
+        return ReplicatedTensor(ret, shard_count=1, devices=self.devices)
+
+    def apply_batched_mask(
+        self,
+        *,
+        xt: torch.Tensor,
+        mask: tuple[InferenceTensor, InferenceTensor],
+    ) -> InferenceTensor:
+        ret = self._rotary_layer(q=xt, sincos_cache=mask)
+        return ReplicatedTensor(ret, shard_count=1, devices=self.devices)
+
+
+class PipelinedRotaryLayer(CachedRotaryLayer):
+    def __init__(
+        self,
+        *,
+        rotary_layer: RotaryEmbeddingLayer,
+        dtype: torch.dtype,
+        device: torch.device,
+        pipeline_to_device_map: list[list[int]],
+    ):
+        super().__init__(
+            rotary_layer=rotary_layer,
+            dtype=dtype,
+            device=device,
+        )
+        self.devices = devices
+
+    def forward(
+        self,
+        *,
+        xt: torch.Tensor,
+        start_positions: Optional[torch.Tensor] = None,
+    ):
+        ret = super().forward(
+            xt=xt,
+            start_positions=start_positions,
+        )
+        return InferenceTensor(ret, shard_count=1, devices=self.devices)
+
+    def apply_batched_mask(
+        self,
+        *,
+        xt: torch.Tensor,
+        mask: tuple[InferenceTensor, InferenceTensor],
+    ) -> InferenceTensor:
+        ret = self._rotary_layer(q=xt, sincos_cache=mask)
+        return InferenceTensor(ret, shard_count=1, devices=self.devices)
