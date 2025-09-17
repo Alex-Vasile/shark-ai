@@ -153,6 +153,20 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
 
         xq, xk, xv = self.pre_process_attention(x, embedding, start_positions)
 
+        if self.q_quantizer:
+            xq = ops.quantize(xq, self.q_quantizer)
+        if self.k_quantizer:
+            xk = ops.quantize(xk, self.k_quantizer)
+        if self.v_quantizer:
+            xv = ops.quantize(xv, self.v_quantizer)
+
+        # Used by fp8_e4m3fnuz model
+        if self.cache_quantizer and not self.fake_quant:
+            # TODO: this seems like a bastardization of our quantized tensor api
+            # Probably want to add support for using quantized tensors more directly
+            xk = ops.unpack_to_qs(ops.quantize(xk, self.cache_quantizer))
+            xv = ops.unpack_to_qs(ops.quantize(xv, self.cache_quantizer))
+
         if self.use_qk_norm:
             xq = self.qk_norm(xq)
             xk = self.qk_norm(xk)
@@ -178,13 +192,6 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
                 (*input_tokens_shape, 1, 1)
             )  # batch size > 1
             xq = (xq * attn_scales).to(xq.dtype)
-
-        # Used by fp8_e4m3fnuz model
-        if self.cache_quantizer and not self.fake_quant:
-            # TODO: this seems like a bastardization of our quantized tensor api
-            # Probably want to add support for using quantized tensors more directly
-            xk = ops.unpack_to_qs(ops.quantize(xk, self.cache_quantizer))
-            xv = ops.unpack_to_qs(ops.quantize(xv, self.cache_quantizer))
 
         xv = self.pad_kv(xv)
 
@@ -329,13 +336,6 @@ class PagedLlamaGQAttentionBlock(PagedLlamaAttentionBlock):
         if self.use_rope:
             xq = embedding.forward(xt=xq, start_positions=start_positions)
             xk = embedding.forward(xt=xk, start_positions=start_positions)
-
-        if self.q_quantizer:
-            xq = ops.quantize(xq, self.q_quantizer)
-        if self.k_quantizer:
-            xk = ops.quantize(xk, self.k_quantizer)
-        if self.v_quantizer:
-            xv = ops.quantize(xv, self.v_quantizer)
         return xq, xk, xv
 
 

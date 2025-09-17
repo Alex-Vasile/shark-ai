@@ -553,9 +553,7 @@ class PagedAttention(ABC):
         k: torch.Tensor | ReplicatedTensor,
         v: torch.Tensor | ReplicatedTensor,
         head_count_attn: int,
-        cache_quantizer: QuantizerTensor | ReplicatedTensor | None,
         attention_kernel: str,
-        fake_quant: Optional[bool],
         softcap: Optional[float] = None,
         scale: Optional[torch.Tensor | ReplicatedTensor] = None,
         mask: Optional[torch.Tensor | ReplicatedTensor] = None,
@@ -737,26 +735,13 @@ class PagedMHAttention(PagedAttention):
         k: torch.Tensor | ReplicatedTensor,
         v: torch.Tensor | ReplicatedTensor,
         head_count_attn: int,
-        cache_quantizer: QuantizerTensor | ReplicatedTensor | None,
         attention_kernel: str,
-        fake_quant: Optional[bool],
         softcap: Optional[float] = None,
         scale: Optional[torch.Tensor | ReplicatedTensor] = None,
         mask: Optional[torch.Tensor | ReplicatedTensor] = None,
         sliding_window: Optional[int] = None,
         sink: Optional[torch.Tensor | ReplicatedTensor] = None,
     ) -> torch.Tensor | ReplicatedTensor:
-        # Fake quant is already dequantized when stored in the cache.
-        if cache_quantizer and not fake_quant:
-            k_planes = {"qs": k}
-            k = ops.dequantize(
-                k_planes, quantizer=cache_quantizer, dtype=self.attn_dtype
-            )
-            v_planes = {"qs": v}
-            v = ops.dequantize(
-                v_planes, quantizer=cache_quantizer, dtype=self.attn_dtype
-            )
-
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
@@ -892,6 +877,17 @@ class PagedMHAttention(PagedAttention):
                 page_ids=seq_block_ids,
             )
 
+        # Fake quant is already dequantized when stored in the cache.
+        if cache_quantizer and not fake_quant:
+            k_planes = {"qs": k}
+            k = ops.dequantize(
+                k_planes, quantizer=cache_quantizer, dtype=self.attn_dtype
+            )
+            v_planes = {"qs": v}
+            v = ops.dequantize(
+                v_planes, quantizer=cache_quantizer, dtype=self.attn_dtype
+            )
+
         is_prefill = q.shape[1] != 1
         if is_prefill:
             # q, k, v, x, and h all have the same .shape[1] (batch_seqlen)
@@ -921,8 +917,6 @@ class PagedMHAttention(PagedAttention):
             v=v,
             head_count_attn=head_count_attn,
             attention_kernel=attention_kernel,
-            cache_quantizer=cache_quantizer,
-            fake_quant=fake_quant,
             softcap=softcap,
             scale=scale,
             mask=mask,
@@ -939,9 +933,7 @@ class PagedGQAttention(PagedMHAttention):
         k: torch.Tensor | ReplicatedTensor,
         v: torch.Tensor | ReplicatedTensor,
         head_count_attn: int,
-        cache_quantizer: QuantizerTensor | ReplicatedTensor | None,
         attention_kernel: str,
-        fake_quant: Optional[bool],
         softcap: Optional[float] = None,
         scale: Optional[torch.Tensor | ReplicatedTensor] = None,
         mask: Optional[torch.Tensor | ReplicatedTensor] = None,
@@ -965,9 +957,7 @@ class PagedGQAttention(PagedMHAttention):
             k=k,
             v=v,
             head_count_attn=head_count_attn,
-            cache_quantizer=cache_quantizer,
             attention_kernel=attention_kernel,
-            fake_quant=fake_quant,
             softcap=softcap,
             scale=scale,
             mask=mask,
