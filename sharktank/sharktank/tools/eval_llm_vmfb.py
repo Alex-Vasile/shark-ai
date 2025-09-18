@@ -60,7 +60,13 @@ def compile_ir(ir, iree_hal_target_device, iree_hip_target):
     return vmfb
 
 
-def get_instance(vmfb, config, irpa, iree_hal_target_device, iree_hip_target):
+def get_instance(
+    vmfb: str | None,
+    config: str | None,
+    irpa: str,
+    iree_hal_target_device: str | None,
+    iree_hip_target: str | None,
+) -> LlmInstance:
     if vmfb is None:
         if iree_hal_target_device is None:
             raise ValueError("--iree-hal-target-device is required")
@@ -82,15 +88,15 @@ def get_instance(vmfb, config, irpa, iree_hal_target_device, iree_hip_target):
 
 
 def main(
-    dataset,
-    vmfb,
-    config,
-    irpa,
-    tokenizer,
-    min_context,
-    expected_err,
-    iree_hal_target_device,
-    iree_hip_target,
+    dataset: str,
+    vmfb: str | None,
+    config: str | None,
+    irpa: str,
+    tokenizer: str,
+    min_context: int,
+    expected_err: float | None,
+    iree_hal_target_device: str | None,
+    iree_hip_target: str | None,
 ):
     tokenizer = load_tokenizer(tokenizer)
     llm = get_instance(
