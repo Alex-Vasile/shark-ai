@@ -141,6 +141,13 @@ if __name__ == "__main__":
     parser.add_argument("--iree-hal-target-device", help="Target device if compiling")
     parser.add_argument("--iree-hip-target", help="Iree hip target")
     args = parser.parse_args()
+
+    # TODO: This is deceiving, it's the tokenizer directory
+    if args.tokenizer.endswith("tokenizer.json"):
+        args.tokenizer = args.tokenizer[:-len("tokenizer.json")]
+    elif args.tokenizer.endswith("tokenizer_config.json"):
+        args.tokenizer = args.tokenizer[:-len("tokenizer_config.json")]
+    
     main(
         dataset=args.dataset,
         irpa=args.irpa,
