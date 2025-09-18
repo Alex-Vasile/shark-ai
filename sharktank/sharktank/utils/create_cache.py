@@ -4,8 +4,11 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+import logging
 from sharktank.layers import *
 from sharktank.types.quantizers import StaticScaledQuantizer
+
+logger = logging.getLogger(__name__)
 
 
 def create_paged_attention(
@@ -15,6 +18,7 @@ def create_paged_attention(
     block_index: int,
     k_quantizer: StaticScaledQuantizer | None = None,
     v_quantizer: StaticScaledQuantizer | None = None,
+    cache_quantizer: StaticScaledQuantizer | None = None,
 ) -> PagedAttention:
     if config.kv_cache_type != "paged":
         raise ValueError("Model does not use paged kv cache, cannot create kv cache")
@@ -41,4 +45,5 @@ def create_paged_attention(
         activation_dtype=config.activation_dtype,
         k_quantizer=k_quantizer,
         v_quantizer=v_quantizer,
+        cache_quantizer=cache_quantizer,
     )

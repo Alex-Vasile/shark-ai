@@ -210,6 +210,7 @@ class DefaultPagedKVCache(PagedKVCache):
         page_ids: torch.Tensor,
         k_quantizer: StaticScaledQuantizer | None = None,
         v_quantizer: StaticScaledQuantizer | None = None,
+        cache_quantizer: StaticScaledQuantizer | None = None,
     ) -> torch.Tensor | QuantizedTensor:
         page_table = self.unflatten_page_table(state)
 
@@ -370,6 +371,7 @@ class PipelinedPagedKVCache(PagedKVCache):
         page_ids: ReplicatedTensor,
         k_quantizer: ReplicatedTensor | None = None,
         v_quantizer: ReplicatedTensor | None = None,
+        cache_quantizer: ReplicatedTensor | None = None,
     ) -> Union[torch.Tensor, QuantizedTensor]:
         pipeline = self.config.pipeline_for_block(transformer_block_index)
         transformer_block_index = self.adjust_index(transformer_block_index)
@@ -379,6 +381,8 @@ class PipelinedPagedKVCache(PagedKVCache):
             assert len(k_quantizer.shards) == 1, "Tensor parallelism not supported."
         if v_quantizer is not None:
             assert len(v_quantizer.shards) == 1, "Tensor parallelism not supported."
+        if cache_quantizer is not None:
+            assert len(cache_quantizer.shards) == 1, "Tensor parallelism not supported."
 
         state = CacheAllocation([state[pipeline]])
         page_ids = page_ids.shards[0]
@@ -574,7 +578,6 @@ class PagedAttention(ABC):
         start_positions: torch.Tensor | ReplicatedTensor,
         attention_kernel: str,
         head_count_attn: int,
-        cache_quantizer: Optional[QuantizerTensor],
         fake_quant: Optional[bool],
         seq_lens: torch.Tensor | None,
         softcap: Optional[float] = None,
@@ -596,7 +599,6 @@ class PagedAttention(ABC):
         start_positions: Optional[torch.Tensor] = None,
         attention_kernel: str,
         head_count_attn: int,
-        cache_quantizer: QuantizerTensor | ReplicatedTensor | None,
         fake_quant: Optional[bool],
         seq_lens: torch.Tensor | None,
         softcap: Optional[float] = None,
@@ -619,7 +621,6 @@ class PagedAttention(ABC):
         start_positions: torch.Tensor | ReplicatedTensor | None,
         attention_kernel: str,
         head_count_attn: int,
-        cache_quantizer: QuantizerTensor | ReplicatedTensor | None,
         fake_quant: Optional[bool],
         softcap: Optional[float],
         scale: Optional[float],
@@ -664,6 +665,7 @@ class PagedMHAttention(PagedAttention):
         kv_cache: KVCache,
         k_quantizer: StaticScaledQuantizer | None = None,
         v_quantizer: StaticScaledQuantizer | None = None,
+        cache_quantizer: StaticScaledQuantizer | None = None,
     ):
         self.transformer_block_index = transformer_block_index
         self.block_seq_stride = kv_cache.block_seq_stride
@@ -671,6 +673,7 @@ class PagedMHAttention(PagedAttention):
         self.kv_cache = kv_cache
         self.k_quantizer = k_quantizer
         self.v_quantizer = v_quantizer
+        self.cache_quantizer = cache_quantizer
         self.activation_dtype = activation_dtype
         self.attention_chunk_size = attention_chunk_size
         self.use_rope = use_rope
@@ -692,6 +695,7 @@ class PagedMHAttention(PagedAttention):
             page_ids=page_ids,
             k_quantizer=self.k_quantizer,
             v_quantizer=self.v_quantizer,
+            cache_quantizer=self.cache_quantizer,
         )
 
     def write_timestep(
@@ -770,7 +774,6 @@ class PagedMHAttention(PagedAttention):
         start_positions: torch.Tensor,
         attention_kernel: str,
         head_count_attn: int,
-        cache_quantizer: Optional[QuantizerTensor],
         fake_quant: Optional[bool],
         seq_lens: torch.Tensor | None,
         softcap: Optional[float] = None,
@@ -796,7 +799,6 @@ class PagedMHAttention(PagedAttention):
             seq_block_ids=seq_block_ids,
             attention_kernel=attention_kernel,
             head_count_attn=head_count_attn,
-            cache_quantizer=cache_quantizer,
             start_positions=start_positions,
             fake_quant=fake_quant,
             softcap=softcap,
@@ -816,7 +818,6 @@ class PagedMHAttention(PagedAttention):
         start_positions: Optional[torch.Tensor] = None,
         attention_kernel: str,
         head_count_attn: int,
-        cache_quantizer: QuantizerTensor | ReplicatedTensor | None,
         fake_quant: Optional[bool],
         seq_lens: torch.Tensor | None,
         softcap: Optional[float] = None,
@@ -842,7 +843,6 @@ class PagedMHAttention(PagedAttention):
             start_positions=start_positions,
             attention_kernel=attention_kernel,
             head_count_attn=head_count_attn,
-            cache_quantizer=cache_quantizer,
             fake_quant=fake_quant,
             softcap=softcap,
             scale=scale,
@@ -862,7 +862,6 @@ class PagedMHAttention(PagedAttention):
         start_positions: torch.torch.Tensor | None,
         attention_kernel: str,
         head_count_attn: int,
-        cache_quantizer: Optional[QuantizerTensor],
         fake_quant: Optional[bool],
         softcap: Optional[float],
         scale: Optional[float],
@@ -878,14 +877,14 @@ class PagedMHAttention(PagedAttention):
             )
 
         # Fake quant is already dequantized when stored in the cache.
-        if cache_quantizer and not fake_quant:
+        if self.cache_quantizer and not fake_quant:
             k_planes = {"qs": k}
-            k = ops.dequantize(
-                k_planes, quantizer=cache_quantizer, dtype=self.attn_dtype
+            k1 = ops.dequantize(
+                k_planes, quantizer=self.cache_quantizer, dtype=self.attn_dtype
             )
             v_planes = {"qs": v}
             v = ops.dequantize(
-                v_planes, quantizer=cache_quantizer, dtype=self.attn_dtype
+                v_planes, quantizer=self.cache_quantizer, dtype=self.attn_dtype
             )
 
         is_prefill = q.shape[1] != 1

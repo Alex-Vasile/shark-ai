@@ -110,6 +110,7 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
             block_index,
             self.k_quantizer,
             self.v_quantizer,
+            self.cache_quantizer,
         )
 
         if self.use_qk_norm:
@@ -154,7 +155,9 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
         xq, xk, xv = self.pre_process_attention(x, embedding, start_positions)
 
         if self.q_quantizer:
-            xq = ops.quantize(xq, self.q_quantizer)
+            xq = ops.quantize(
+                xq, self.q_quantizer
+            )  # bfloat16 -> (PlanarQuantized float8_e4m3fnuz -> bfloat16)
         if self.k_quantizer:
             xk = ops.quantize(xk, self.k_quantizer)
         if self.v_quantizer:
@@ -164,7 +167,9 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
         if self.cache_quantizer and not self.fake_quant:
             # TODO: this seems like a bastardization of our quantized tensor api
             # Probably want to add support for using quantized tensors more directly
-            xk = ops.unpack_to_qs(ops.quantize(xk, self.cache_quantizer))
+            xk = ops.unpack_to_qs(
+                ops.quantize(xk, self.cache_quantizer)
+            )  # bfloat16 -> (PlanarQuantized float8_e4m3fnuz -> bfloat16) -> float8_e4m3fnuz
             xv = ops.unpack_to_qs(ops.quantize(xv, self.cache_quantizer))
 
         if self.use_qk_norm:
@@ -208,7 +213,6 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
             seq_block_ids=seq_block_ids,
             start_positions=start_positions,
             head_count_attn=self.head_count,
-            cache_quantizer=self.cache_quantizer,
             fake_quant=self.fake_quant,
             attention_kernel=self.attention_kernel,
             scale=self.attention_scale,
