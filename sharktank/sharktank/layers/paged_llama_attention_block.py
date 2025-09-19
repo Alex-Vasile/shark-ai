@@ -200,6 +200,8 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
 
         xv = self.pad_kv(xv)
 
+        xv = self.pad_kv(xv)
+
         is_decode = isinstance(h.shape[1], int) and h.shape[1] == 1
         if is_decode:
             attn_function = self.paged_attention.forward_decode
@@ -213,6 +215,7 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
             seq_block_ids=seq_block_ids,
             start_positions=start_positions,
             head_count_attn=self.head_count,
+            cache_quantizer=self.cache_quantizer,
             fake_quant=self.fake_quant,
             attention_kernel=self.attention_kernel,
             scale=self.attention_scale,
