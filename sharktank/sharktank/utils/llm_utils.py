@@ -591,7 +591,7 @@ class LlmInstance:
         page_sizes,
         block_count,
         logits_normalization="log_softmax",
-        kv_cache_dtype="float8_e4m3fnuz",  # TODO: Grab from somewhere
+        kv_cache_dtype="float16",
     ):
         self._instance = model_instance
         self._block_seq_stride = block_seq_stride
@@ -614,6 +614,7 @@ class LlmInstance:
             block_seq_stride=_block_seq_stride,
             page_sizes=_page_sizes,
             logits_normalization=_logits_normalization,
+            kv_cache_dtype=page_kv_cache.kv_cache_dtype,
         )
 
     def make_batch(self):
