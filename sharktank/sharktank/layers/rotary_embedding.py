@@ -115,28 +115,19 @@ class ReplicatedRotaryLayer(CachedRotaryLayer):
         if devices is None:
             devices = start_positions.devices
 
-        if start_positions is None:
-            # Create from a single shard and introduce transfers since there's no start positions to hint what device they should go on
-            # TODO: Is this needed, or will IREE figure out what device to put it on based downstream uses?
+        start_position_shards = [None] * len(devices)
+        if start_positions is not None:
+            start_position_shards = start_positions.shards
+
+        t0_shards, t1_shards = [], []
+        for start_position_shard in start_position_shards:
             t0_shard, t1_shard = super().compute_batch_mask(
-                start_positions=None, batch_seq_len=batch_seq_len
+                start_position_shard, batch_seq_len
             )
-            table_0 = ReplicatedTensor(
-                ts=t0_shard, shard_count=len(devices), devices=devices
-            )
-            table_1 = ReplicatedTensor(
-                ts=t1_shard, shard_count=len(devices), devices=devices
-            )
-        else:
-            table_0_shards, table_1_shards = [], []
-            for start_position_shard in start_positions.shards:
-                t0_shard, t1_shard = super().compute_batch_mask(
-                    start_position_shard, batch_seq_len
-                )
-                table_0_shards.append(t0_shard)
-                table_1_shards.append(t1_shard)
-            table_0 = ReplicatedTensor(ts=table_0_shards, devices=devices)
-            table_1 = ReplicatedTensor(ts=table_1_shards, devices=devices)
+            t0_shards.append(t0_shard)
+            t1_shards.append(t1_shard)
+        table_0 = ReplicatedTensor(ts=t0_shards, devices=devices)
+        table_1 = ReplicatedTensor(ts=t1_shards, devices=devices)
         return table_0, table_1
 
     def apply_batched_mask(
