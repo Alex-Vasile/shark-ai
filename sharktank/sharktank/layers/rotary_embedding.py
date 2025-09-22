@@ -161,7 +161,9 @@ def build_rotary_layer(
     rotary_embd_layer_kwargs["interleaved"] = not use_hf
 
     RotaryLayerClazz = CachedRotaryLayer
-    if pipeline_stage_to_device_map and len(pipeline_stage_to_device_map) > 1:
+    if pipeline_stage_to_device_map and (
+        len(pipeline_stage_to_device_map) > 1 or os.getenv("PP_OVERRIDE")
+    ):
         num_shards = len(pipeline_stage_to_device_map[0])
         if num_shards == 1:
             RotaryLayerClazz = ReplicatedRotaryLayer
