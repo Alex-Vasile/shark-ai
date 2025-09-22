@@ -64,7 +64,7 @@ class ServicePagedLlmModelV1(torch.nn.Module):
             cache_state=cache_state,
             start_positions=start_pos,
         )
-
+        return logits
         logits = ops.unshard(logits)
 
         if self.config.logits_normalization == "softmax":
