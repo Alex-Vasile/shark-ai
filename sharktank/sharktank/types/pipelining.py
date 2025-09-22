@@ -7,6 +7,7 @@
 """
 Specifications describing how
 """
+import os
 from iree.turbine.aot import DeviceTensorTrait
 
 from sharktank.types import (
@@ -129,7 +130,7 @@ def distribute_blocks_uniformly_over_pipeline_stages(
             If pipeline_parallelism_size is 1, both lists will be None.
     """
 
-    if pipeline_parallelism_size == 1:
+    if pipeline_parallelism_size == 1 and not os.getenv("PP_OVERRIDE"):
         return None, None
 
     block_to_pipeline_stage = [
@@ -184,7 +185,7 @@ def pipeline_parallelize_llm_theta(theta: Theta, config: ParallelismConfig) -> N
         theta: The Theta object containing the model.
         pipeline_parallelism_size: The number of pipeline stages to distribute the blocks over.
     """
-    if config.pipeline_size == 1:
+    if config.pipeline_size == 1 and not os.getenv("PP_OVERRIDE"):
         return
 
     block_indices = [int(bi) for bi in theta.tensor("blk").keys()]

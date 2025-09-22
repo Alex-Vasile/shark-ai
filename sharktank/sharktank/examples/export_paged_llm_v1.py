@@ -227,6 +227,8 @@ def main():
                 f"Parent directory for output MLIR file does not exist: {mlir_dir}"
             )
 
+    print(f"PP_OVERRIDE: {os.getenv('PP_OVERRIDE')}")
+
     dataset = cli.get_input_dataset(args)
 
     # Configure model export config from cli args:
