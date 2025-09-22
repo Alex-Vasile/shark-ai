@@ -4,17 +4,29 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+from abc import ABC, abstractmethod
 from typing import Optional
 
 import torch
 
-from sharktank.types.tensors import InferenceTensor, ReplicatedTensor
+from sharktank.types.tensors import AnyTensor, InferenceTensor, ReplicatedTensor
 
 from .base import BaseLayer
 from .rotary_embedding_hf import RotaryEmbeddingLayer
 
 
-class CachedRotaryLayer(BaseLayer):
+class CachedRotaryLayer(ABC, BaseLayer):
+    @abstractmethod
+    def forward(
+        self,
+        *,
+        xt: AnyTensor,
+        start_positions: AnyTensor | None = None,
+    ) -> AnyTensor:
+        pass
+
+
+class DefaultCachedRotaryLayer(CachedRotaryLayer):
     def __init__(
         self,
         *,
@@ -50,7 +62,6 @@ class CachedRotaryLayer(BaseLayer):
         self,
         start_positions: Optional[torch.Tensor],
         batch_seq_len: int | torch.SymInt,
-        devices: list[int] | None = None,
     ) -> tuple[InferenceTensor, InferenceTensor]:
 
         positions_seq = torch.arange(0, batch_seq_len, device=self._device)
@@ -77,7 +88,8 @@ class ReplicatedRotaryLayer(CachedRotaryLayer):
         dtype: torch.dtype,
         device: torch.device,
     ):
-        super().__init__(
+        super().__init__()
+        self.cached_rotary_layer = DefaultCachedRotaryLayer(
             rotary_layer=rotary_layer,
             dtype=dtype,
             device=device,
@@ -89,59 +101,21 @@ class ReplicatedRotaryLayer(CachedRotaryLayer):
         xt: ReplicatedTensor,
         start_positions: ReplicatedTensor | None = None,
     ) -> InferenceTensor:
-        batch_seq_len = xt.shape[1]
-        mask = self.compute_batch_mask(
-            start_positions=start_positions,
-            batch_seq_len=batch_seq_len,
-            devices=xt.devices,
-        )
-        return self.apply_batched_mask(xt=xt, mask=mask)
-
-    def compute_batch_mask(
-        self,
-        start_positions: ReplicatedTensor | None,
-        batch_seq_len: int | torch.SymInt,
-        devices: list[int] | None = None,
-    ) -> tuple[ReplicatedTensor, ReplicatedTensor]:
-        assert (start_positions is not None) or (
-            devices is not None
-        ), "Either start_positions or devices must be provided to properly place the replicated tensor"
-
-        if devices is not None and start_positions is not None:
-            assert list(devices) == list(
-                start_positions.devices
-            ), "Devices must match between provided devices and start_positions"
-
-        if devices is None:
-            devices = start_positions.devices
-
-        start_position_shards = [None] * len(devices)
+        assert (
+            len(xt.shards) == 1
+        ), "ReplicatedRotaryLayer does not support tensor parallelism"
         if start_positions is not None:
-            start_position_shards = start_positions.shards
+            assert (
+                len(start_positions.shards) == 1
+            ), "ReplicatedRotaryLayer does not support tensor parallelism"
 
-        t0_shards, t1_shards = [], []
-        for start_position_shard in start_position_shards:
-            t0_shard, t1_shard = super().compute_batch_mask(
-                start_position_shard, batch_seq_len
-            )
-            t0_shards.append(t0_shard)
-            t1_shards.append(t1_shard)
-        table_0 = ReplicatedTensor(ts=t0_shards, devices=devices)
-        table_1 = ReplicatedTensor(ts=t1_shards, devices=devices)
-        return table_0, table_1
-
-    def apply_batched_mask(
-        self,
-        *,
-        xt: ReplicatedTensor,
-        mask: tuple[ReplicatedTensor, ReplicatedTensor],
-    ) -> ReplicatedTensor:
-        assert list(xt.devices) == list(mask[0].devices) == list(mask[1].devices)
-        assert len(xt.devices) == len(mask[0].devices) == len(mask[1].devices) == 1
-
-        mask = (mask[0].shards[0], mask[1].shards[0])
-        shard = self._rotary_layer(q=xt.shards[0], sincos_cache=mask)
-        return ReplicatedTensor(ts=[shard], devices=xt.devices)
+        rot_embedding = self.cached_rotary_layer.forward(
+            xt=xt.shards[0],
+            start_positions=start_positions.shards[0]
+            if start_positions is not None
+            else None,
+        )
+        return ReplicatedTensor(ts=[rot_embedding], devices=xt.devices)
 
 
 def build_rotary_layer(
@@ -160,7 +134,7 @@ def build_rotary_layer(
     rotary_embd_layer_kwargs["head_dim"] = rope_dimension_count
     rotary_embd_layer_kwargs["interleaved"] = not use_hf
 
-    RotaryLayerClazz = CachedRotaryLayer
+    RotaryLayerClazz = DefaultCachedRotaryLayer
     if pipeline_stage_to_device_map and (
         len(pipeline_stage_to_device_map) > 1 or os.getenv("PP_OVERRIDE")
     ):
