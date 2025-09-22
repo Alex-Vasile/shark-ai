@@ -24,7 +24,7 @@ class CachedRotaryLayer(ABC, BaseLayer):
         xt: AnyTensor,
         start_positions: AnyTensor | None = None,
     ) -> AnyTensor:
-        pass
+        ...
 
 
 class DefaultCachedRotaryLayer(CachedRotaryLayer):
@@ -110,13 +110,15 @@ class ReplicatedRotaryLayer(CachedRotaryLayer):
                 len(start_positions.shards) == 1
             ), "ReplicatedRotaryLayer does not support tensor parallelism"
 
+        devices = xt.devices
+        xt = xt.shards[0]
+        if start_positions is not None:
+            start_positions = start_positions.shards[0]
+
         rot_embedding = self.cached_rotary_layer.forward(
-            xt=xt.shards[0],
-            start_positions=start_positions.shards[0]
-            if start_positions is not None
-            else None,
+            xt=xt, start_positions=start_positions
         )
-        return ReplicatedTensor(ts=[rot_embedding], devices=xt.devices)
+        return ReplicatedTensor(ts=[rot_embedding], devices=devices)
 
 
 def build_rotary_layer(
