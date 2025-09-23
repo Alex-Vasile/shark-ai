@@ -166,13 +166,6 @@ class PagedLlmModelV1(BaseCausalLMModel):
                 seq_block_ids=seq_block_ids,
             )
             self.trace_tensor(f"llama.attn_block.{block_idx}.output", h)
-            if block_idx == 0:
-                break
-        return h
-        h = transfer_between_blocks(
-            h,
-            curr_block_tensors=self.theta.tensor("blk", self.hp.block_count - 1),
-        )
 
         h = h.to(self.config.activation_dtype)
         h = self.output_norm(h)
@@ -404,7 +397,7 @@ class AttentionFFNBlock(ThetaLayer):
             start_positions=start_positions,
             cache_state=cache_state,
         )
-        return h
+
         # Feed forward network.
         final_output = self.ffn(self.ffn_norm(h))
 

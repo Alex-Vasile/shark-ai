@@ -150,8 +150,9 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
         cache_state: CacheAllocation | None = None,
     ):
         x = self.attn_norm(h)
+
         xq, xk, xv = self.pre_process_attention(x, embedding, start_positions)
-        return xq, xk, xv
+
         if self.use_qk_norm:
             xq = self.qk_norm(xq)
             xk = self.qk_norm(xk)
@@ -316,8 +317,6 @@ class PagedLlamaGQAttentionBlock(PagedLlamaAttentionBlock):
         xq = self.attn_q(x)
         xk = self.attn_k(x)
         xv = self.attn_v(x)
-
-        return xq, xk, xv
 
         assert xq.shape[-1] == self.head_count * self.head_dim
         assert xk.shape[-1] == self.head_count_kv * self.head_dim
