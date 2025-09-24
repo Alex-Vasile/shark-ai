@@ -478,7 +478,13 @@ class ParallelismConfig:
         kwargs = dict(properties)
         fields_name_set = set(field.name for field in fields(ParallelismConfig))
         kwargs = {k: v for k, v in kwargs.items() if k in fields_name_set}
-        return ParallelismConfig(**kwargs)
+
+        if len(kwargs) != 0:
+            return ParallelismConfig(**kwargs)
+
+        return ParallelismConfig.default_config(
+            block_count=LlamaHParams.from_gguf_props(properties).block_count
+        )
 
 
 @dataclass
