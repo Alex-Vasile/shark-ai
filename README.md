@@ -53,7 +53,7 @@
 | sharktank/sharktank/layers/mmdit.py                                           |      103 |        0 |    100% |           |
 | sharktank/sharktank/layers/modulation.py                                      |       21 |        0 |    100% |           |
 | sharktank/sharktank/layers/norm.py                                            |       37 |        0 |    100% |           |
-| sharktank/sharktank/layers/paged\_attention.py                                |      266 |       18 |     93% |198, 352-355, 359, 379, 381, 419, 759-764, 920, 960-965 |
+| sharktank/sharktank/layers/paged\_attention.py                                |      272 |       19 |     93% |202, 356, 360-363, 367, 387, 389, 427, 767-772, 928, 968-973 |
 | sharktank/sharktank/layers/paged\_llama\_attention\_block.py                  |      144 |       17 |     88% |80, 136, 163-180, 186-187, 334, 336, 338, 460-462 |
 | sharktank/sharktank/layers/rotary\_embedding.py                               |       56 |        3 |     95% |108, 115, 145 |
 | sharktank/sharktank/layers/rotary\_embedding\_hf.py                           |      107 |        2 |     98% |   239-240 |
@@ -169,7 +169,7 @@
 | sharktank/tests/kernels/batch\_matmul\_transpose\_b\_test.py                  |       94 |        6 |     94% |127-130, 143, 170 |
 | sharktank/tests/kernels/conv\_2d\_nchw\_fchw\_test.py                         |       42 |        2 |     95% |    63, 91 |
 | sharktank/tests/kernels/einsum\_q4\_test.py                                   |       69 |        3 |     96% |94, 120, 141 |
-| sharktank/tests/kernels/gemm\_fp4\_asm\_test.py                               |       61 |       42 |     31% |26, 65-133 |
+| sharktank/tests/kernels/gemm\_fp4\_asm\_test.py                               |       60 |       41 |     32% |26, 65-132 |
 | sharktank/tests/kernels/mlir\_kernel\_test.py                                 |       21 |        0 |    100% |           |
 | sharktank/tests/kernels/mmt\_block\_scaled\_offset\_q4\_test.py               |       46 |        3 |     93% |49, 79, 100 |
 | sharktank/tests/kernels/mmt\_block\_scaled\_q8\_test.py                       |       43 |        3 |     93% |46, 74, 94 |
@@ -232,7 +232,7 @@
 | sharktank/tests/utils/patching\_test.py                                       |       44 |        0 |    100% |           |
 | sharktank/tests/utils/testing\_test.py                                        |      132 |        0 |    100% |           |
 | sharktank/tests/utils/tree\_test.py                                           |       20 |        0 |    100% |           |
-|                                                                     **TOTAL** | **22091** | **4828** | **78%** |           |
+|                                                                     **TOTAL** | **22096** | **4828** | **78%** |           |
 
 
 ## Setup coverage badge
