@@ -77,6 +77,8 @@ def sharded_wrap_override():
 
             If no ShardedTensors are present in the input, then no changes are made to input/output.
             """
+            from .utils import tranfer_shards_if_needed
+
             sharded_tensors = []
             for value in itertools.chain(args, kwargs.values()):
                 if isinstance(value, ShardedTensor):
@@ -97,16 +99,11 @@ def sharded_wrap_override():
 
             assert_on_same_devices(*sharded_tensors)
             res = f(*args, **kwargs)
-            if len(sharded_tensors) > 0:
-                if isinstance(res, ShardedTensor):
-                    res = res.clone(devices=sharded_tensors[0].devices)
-                elif isinstance(res, Iterable) and all(
-                    isinstance(r, ShardedTensor) for r in res
-                ):
-                    res = type(res)(
-                        r.clone(devices=sharded_tensors[0].devices) for r in res
-                    )
-            return res
+
+            if len(sharded_tensors) == 0:
+                return res
+
+            return tranfer_shards_if_needed(res, sharded_tensors[0].devices)
 
         func_wrapper._impl_name = getattr(f, "_impl_name", None)  # For impl selection
         return func_wrapper

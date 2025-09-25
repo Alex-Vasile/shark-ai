@@ -402,10 +402,9 @@ class PipelinedPagedKVCache(PagedKVCache):
             v_quantizer=v_quantizer,
         )
 
-        # Don't have to transfer since state is already on the correct device
         devices = self.config.devices_for_pipeline(pipeline)
-        key = ReplicatedTensor(ts=[k_shard], devices=devices)
-        value = ReplicatedTensor(ts=[v_shard], devices=devices)
+        key = ReplicatedTensor(ts=k_shard, shard_count=len(devices), devices=devices)
+        value = ReplicatedTensor(ts=v_shard, shard_count=len(devices), devices=devices)
         return key, value
 
     def write(

@@ -7,14 +7,14 @@
 import functools
 import torch
 
-from typing import Callable, Sequence, Any, Dict, List, Optional, Tuple
+from typing import Callable, Sequence, Any, Dict, Iterable, List, Optional, Tuple
 from sharktank.utils import tree
 from sharktank.types import (
     DefaultPrimitiveTensor,
     PrimitiveTensor,
     QuantizedTensor,
 )
-from sharktank.types.tensors import unbox_tensor
+from sharktank.types.tensors import AnyTensor, ShardedTensor, unbox_tensor
 from ._registry import SignatureDispatcher, AnyType, _matches
 
 __all__ = [
@@ -22,6 +22,7 @@ __all__ = [
     "trivially_replicable",
     "get_all_implementations",
     "cast_to_type_spec",
+    "tranfer_shards_if_needed",
 ]
 
 
@@ -70,6 +71,7 @@ def call_trivially_replicable(
     first_replicated_tensor_arg = [
         arg for arg in flat_args if isinstance(arg, ReplicatedTensor)
     ]
+    # TODO: Check that all replicated tensors are on the same devices.
     first_replicated_tensor_arg = (
         None
         if len(first_replicated_tensor_arg) == 0
@@ -119,6 +121,13 @@ def call_trivially_replicable(
         reduced_results,
         f=make_replicated_tensor_if_tensor_collection,
         is_leaf=_is_leaf_or_tensor_collection,
+    )
+
+    # TODO: Transfer shards to the new devices if needed.
+    from sharktank.ops import tranfer_shards_if_needed
+
+    result = tranfer_shards_if_needed(
+        result_with_replicated_tensor, first_replicated_tensor_arg.devices
     )
     return result_with_replicated_tensor
 
@@ -272,3 +281,26 @@ def cast_to_type_spec(
             )
 
     return result
+
+
+def tranfer_shards_if_needed(
+    res: AnyTensor | Iterable[AnyTensor], output_devices: Tuple[int, ...]
+) -> AnyTensor | Iterable[AnyTensor]:
+    """
+    Tranfer shards to the new devices if needed and return the result on the new devices.
+    """
+    sharded = isinstance(res, ShardedTensor)
+    iterable = isinstance(res, Iterable)
+    sharded_iterable = iterable and all(isinstance(r, ShardedTensor) for r in res)
+    if not (sharded or sharded_iterable):
+        return res
+
+    res_type = type(res)
+    res = list(res) if iterable else [res]
+    for i in range(len(res)):
+        r = res[i]
+        shards = ShardedTensor.move_shards_to_new_devices(
+            r.shards, new_devices=output_devices
+        )
+        res[i] = r.clone(ts=shards, devices=output_devices)
+    return res_type(res) if iterable else res[0]
