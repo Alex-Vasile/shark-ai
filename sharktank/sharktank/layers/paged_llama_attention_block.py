@@ -163,42 +163,52 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
         start_positions: Optional[torch.Tensor] = None,
         cache_state: CacheAllocation | None = None,
     ):
-        x = self.attn_norm(h)
+        # x = self.attn_norm(h)
 
-        xq, xk, xv = self.pre_process_attention(x, embedding, start_positions)
+        xq, xk, xv = self.pre_process_attention(h, embedding, start_positions)
 
-        if self.use_qk_norm:
-            xq = self.qk_norm(xq)
-            xk = self.qk_norm(xk)
+        xq = xq.flatten(*self.dims_to_flatten).to(h.dtype)
+        xv = xv.flatten(*self.dims_to_flatten).to(h.dtype)
+        xv = xv.repeat(1, 1, self.head_count // self.head_count_kv)
+        xk = xk.flatten(*self.dims_to_flatten).to(h.dtype)
+        xk = xk.repeat(1, 1, self.head_count // self.head_count_kv)
+        res = xq + xv + xk
+        return res
+
+        # return res.to(h.dtype)
+
+        # if self.use_qk_norm:
+        # xq = self.qk_norm(xq)
+        # xk = self.qk_norm(xk)
 
         # Use temperature tuning from https://arxiv.org/abs/2501.19399
         # Ken M. Nakanishi - Scalable-Softmax Is Superior for Attention (2025)
-        if self.attn_temperature_tuning and not self.use_rope:
-            if start_positions is None:
-                cache_position = torch.arange(
-                    0, h.shape[1], dtype=torch.long, device=h.device
-                )
-            else:
-                assert False, "TODO: decode step"
-            attn_scales = (
-                torch.log(
-                    torch.floor((cache_position.float() + 1.0) / self.floor_scale) + 1.0
-                )
-                * self.attention_scale
-                + 1.0
-            ).to(xq.device)
-            input_tokens_shape = h.shape[:-1]
-            attn_scales = attn_scales.view((1, input_tokens_shape[-1], 1, 1)).expand(
-                (*input_tokens_shape, 1, 1)
-            )  # batch size > 1
-            xq = (xq * attn_scales).to(xq.dtype)
+        # if self.attn_temperature_tuning and not self.use_rope:
+        #     if start_positions is None:
+        #         cache_position = torch.arange(
+        #             0, h.shape[1], dtype=torch.long, device=h.device
+        #         )
+        #     else:
+        #         assert False, "TODO: decode step"
+        #     attn_scales = (
+        #         torch.log(
+        #             torch.floor((cache_position.float() + 1.0) / self.floor_scale) + 1.0
+        #         )
+        #         * self.attention_scale
+        #         + 1.0
+        #     ).to(xq.device)
+        #     input_tokens_shape = h.shape[:-1]
+        #     attn_scales = attn_scales.view((1, input_tokens_shape[-1], 1, 1)).expand(
+        #         (*input_tokens_shape, 1, 1)
+        #     )  # batch size > 1
+        #     xq = (xq * attn_scales).to(xq.dtype)
 
         # Used by fp8_e4m3fnuz model
         if self.cache_quantizer and not self.fake_quant:
             # TODO: this seems like a bastardization of our quantized tensor api
             # Probably want to add support for using quantized tensors more directly
-            xk = ops.unpack_to_qs(ops.quantize(xk, self.cache_quantizer))
-            xv = ops.unpack_to_qs(ops.quantize(xv, self.cache_quantizer))
+            xk = xk.to(torch.float8_e4m3fn)
+            xv = xv.to(torch.float8_e4m3fn)
 
         xv = self.pad_kv(xv)
 
@@ -228,9 +238,9 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
         attn_output = attn_output.flatten(*self.dims_to_flatten)
 
         # Project.
-        attn_output = self.attn_output(attn_output)
-        attn_output = self.attn_output_norm(attn_output)
-
+        # attn_output = self.attn_output(attn_output)
+        # attn_output = self.attn_output_norm(attn_output)
+        return attn_output.to(h.dtype)
         h = h + attn_output.to(dtype=h.dtype)
         return h
 
@@ -327,22 +337,27 @@ class PagedLlamaGQAttentionBlock(PagedLlamaAttentionBlock):
 
     def _project_qkv(self, x):
         bs, batch_seq_len, _ = x.shape
-        if self.use_fused_qkv:
-            # Fused QKV path: single linear layer + slicing
-            qkv = self.attn_qkv(x)
+        # if self.use_fused_qkv:
+        #     # Fused QKV path: single linear layer + slicing
+        #     qkv = self.attn_qkv(x)
 
-            # Slice QKV into separate tensors
-            q_end = self.head_count * self.head_dim
-            k_end = q_end + self.head_count_kv * self.head_dim
-            v_end = k_end + self.head_count_kv * self.head_dim
+        #     # Slice QKV into separate tensors
+        #     q_end = self.head_count * self.head_dim
+        #     k_end = q_end + self.head_count_kv * self.head_dim
+        #     v_end = k_end + self.head_count_kv * self.head_dim
 
-            q = qkv[:, :, :q_end]
-            k = qkv[:, :, q_end:k_end]
-            v = qkv[:, :, k_end:v_end]
-        else:
-            q = self.attn_q(x)
-            k = self.attn_k(x)
-            v = self.attn_v(x)
+        #     q = qkv[:, :, :q_end]
+        #     k = qkv[:, :, q_end:k_end]
+        #     v = qkv[:, :, k_end:v_end]
+        # else:
+        q = x[..., : self.head_count * self.head_dim]
+        k = x[..., : self.head_count_kv * self.head_dim]
+        v = x[..., : self.head_count_kv * self.head_dim]
+
+        q = self.attn_q(x)
+        k = self.attn_k(x)
+        v = self.attn_v(x)
+
         assert q.shape[-1] == self.head_count * self.head_dim
         assert k.shape[-1] == self.head_count_kv * self.head_dim
         assert v.shape[-1] == self.head_count_kv * self.head_dim
@@ -361,20 +376,20 @@ class PagedLlamaGQAttentionBlock(PagedLlamaAttentionBlock):
 
         xq, xk, xv = self._project_qkv(x)
 
-        if self.use_rope:
-            xq = embedding.forward(xt=xq, start_positions=start_positions)
-            xk = embedding.forward(xt=xk, start_positions=start_positions)
+        # if self.use_rope:
+        # xq = embedding.forward(xt=xq, start_positions=start_positions)
+        # xk = embedding.forward(xt=xk, start_positions=start_positions)
 
         if (
             not self.use_fused_qkv
         ):  # TODO: we need to add quantization for the fused qkv path
             # For separate QKV, apply individual quantization
-            if self.attn_q.q_output is not None:
-                xq = ops.quantize(xq, self.attn_q.q_output)
-            if self.attn_k.q_output is not None:
-                xk = ops.quantize(xk, self.attn_k.q_output)
-            if self.attn_v.q_output is not None:
-                xv = ops.quantize(xv, self.attn_v.q_output)
+            if self.q_quantizer:
+                xq = ops.quantize(xq, self.q_quantizer)
+            if self.k_quantizer:
+                xk = ops.quantize(xk, self.k_quantizer)
+            if self.v_quantizer:
+                xv = ops.quantize(xv, self.v_quantizer)
         return xq, xk, xv
 
 
