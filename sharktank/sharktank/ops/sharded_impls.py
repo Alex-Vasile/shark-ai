@@ -864,6 +864,22 @@ def matmul_replicated_lhs_split_rhs(
     return SplitPrimitiveTensor(ts=shards, shard_dim=len(shards[0].shape) - 1)
 
 
+@matmul.override(Tensor, ReplicatedTensor)
+def matmul_unsharded_lhs_replicated_rhs(
+    lhs: Tensor, rhs: ReplicatedTensor, *, transpose_rhs: bool
+) -> ReplicatedTensor:
+    lhs = replicate(lhs, count=rhs.shard_count, devices=rhs.devices)
+    return matmul(lhs, rhs, transpose_rhs=transpose_rhs)
+
+
+@matmul.override(ReplicatedTensor, Tensor)
+def matmul_replicated_lhs_unsharded_rhs(
+    lhs: ReplicatedTensor, rhs: Tensor, *, transpose_rhs: bool
+) -> Tensor:
+    rhs = replicate(rhs, count=lhs.shard_count, devices=lhs.devices)
+    return matmul(lhs, rhs, transpose_rhs=transpose_rhs)
+
+
 @matmul.override(SplitPrimitiveTensor, Tensor)
 def matmul_split_lhs(
     lhs: SplitPrimitiveTensor, rhs, *, transpose_rhs: bool
