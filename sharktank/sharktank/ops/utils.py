@@ -129,7 +129,7 @@ def call_trivially_replicable(
     result = tranfer_shards_if_needed(
         result_with_replicated_tensor, first_replicated_tensor_arg.devices
     )
-    return result_with_replicated_tensor
+    return result
 
 
 def trivially_replicable(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -302,5 +302,5 @@ def tranfer_shards_if_needed(
         shards = ShardedTensor.move_shards_to_new_devices(
             r.shards, new_devices=output_devices
         )
-        res[i] = r.clone(ts=shards, devices=output_devices)
+        res[i] = r.clone(ts=r.shards, devices=output_devices)
     return res_type(res) if iterable else res[0]
