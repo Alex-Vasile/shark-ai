@@ -354,9 +354,9 @@ class PagedLlamaGQAttentionBlock(PagedLlamaAttentionBlock):
         k = x[..., : self.head_count_kv * self.head_dim]
         v = x[..., : self.head_count_kv * self.head_dim]
 
-        # q = self.attn_q(x)
-        # k = self.attn_k(x)
-        # v = self.attn_v(x)
+        q = self.attn_q(x)
+        k = self.attn_k(x)
+        v = self.attn_v(x)
 
         assert q.shape[-1] == self.head_count * self.head_dim
         assert k.shape[-1] == self.head_count_kv * self.head_dim
