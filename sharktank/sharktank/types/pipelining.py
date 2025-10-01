@@ -93,7 +93,8 @@ def transfer_between_blocks(
 
         if isinstance(x, ShardedTensor):
             shards = ShardedTensor.move_shards_to_new_devices(
-                x.shards, new_devices=new_devices, old_devices=x.devices
+                x.shards,
+                new_devices=new_devices,
             )
             new_x = x.clone(ts=shards, devices=new_devices)
         else:
