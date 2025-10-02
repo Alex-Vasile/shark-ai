@@ -206,9 +206,6 @@ class PagedLlmModelV1(BaseCausalLMModel):
             if block_idx == 0:
                 self.trace_tensor(f"llama.attn_block.{block_idx}.input", h)
 
-            if block_idx not in [62, 63]:
-                continue
-
             (h, start_positions, seq_lens, seq_block_ids) = transfer_between_blocks(
                 h,
                 start_positions,
@@ -226,11 +223,6 @@ class PagedLlmModelV1(BaseCausalLMModel):
                 seq_block_ids=seq_block_ids,
             )
             self.trace_tensor(f"llama.attn_block.{block_idx}.output", h)
-
-        h = transfer_between_blocks(
-            h,
-            curr_block_tensors=self.theta.tensor("blk", self.hp.block_count - 1),
-        )
 
         h = h.to(self.config.activation_dtype)
         h = self.output_norm(h)
