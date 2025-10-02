@@ -180,7 +180,7 @@ def pipeline_parallelize_llm_theta(theta: Theta, config: ParallelismConfig) -> N
         theta: The Theta object containing the model.
         pipeline_parallelism_size: The number of pipeline stages to distribute the blocks over.
     """
-    if config.pipeline_size == 1 and not os.getenv("PP_OVERRIDE"):
+    if config.pipeline_size == 1:
         return
 
     block_indices = [int(bi) for bi in theta.tensor("blk").keys()]

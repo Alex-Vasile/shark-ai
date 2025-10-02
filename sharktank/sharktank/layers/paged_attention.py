@@ -12,7 +12,6 @@ and dims floating around everywhere.
 """
 
 from abc import ABC, abstractmethod
-import os
 from typing import Optional, Union, List
 from abc import ABC, abstractmethod
 
@@ -490,9 +489,7 @@ def build_cache(
         device=device,
     )
 
-    if parallelism_config is None or (
-        parallelism_config.pipeline_size == 1 and not os.getenv("PP_OVERRIDE")
-    ):
+    if parallelism_config is None or parallelism_config.pipeline_size == 1:
         PagedKVCacheClazz = DefaultPagedKVCache
         kwargs["transformer_block_count"] = transformer_block_count
     else:
