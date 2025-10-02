@@ -163,7 +163,7 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
         start_positions: Optional[torch.Tensor] = None,
         cache_state: CacheAllocation | None = None,
     ):
-        # x = self.attn_norm(h)
+        x = self.attn_norm(h)
 
         xq, xk, xv = self.pre_process_attention(h, embedding, start_positions)
 
