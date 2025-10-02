@@ -354,7 +354,7 @@ class PagedLlamaGQAttentionBlock(PagedLlamaAttentionBlock):
         k = x[..., : self.head_count_kv * self.head_dim]
         v = x[..., : self.head_count_kv * self.head_dim]
 
-        q = self.attn_q(x)
+        # q = self.attn_q(x)
         k = self.attn_k(x)
         v = self.attn_v(x)
 
