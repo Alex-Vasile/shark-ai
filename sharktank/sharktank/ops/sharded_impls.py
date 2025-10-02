@@ -71,14 +71,32 @@ def sharded_wrap_override():
         Wrapper for each NON-TRANSFERRING op defined in this file.
         """
 
+        def label_devices_if_needed(
+            res: AnyTensor | Iterable[AnyTensor], output_devices: Tuple[int, ...]
+        ) -> AnyTensor | Iterable[AnyTensor]:
+            """
+            Relabel all shards for all
+            Tranfer shards to the new devices if needed and return the result on the new devices.
+            """
+            sharded = isinstance(res, ShardedTensor)
+            iterable = isinstance(res, Iterable)
+            sharded_iterable = iterable and all(
+                isinstance(r, ShardedTensor) for r in res
+            )
+            if not (sharded or sharded_iterable):
+                return res
+
+            if sharded:
+                return res.clone(devices=output_devices)
+
+            return type(res)(r.clone(devices=output_devices) for r in res)
+
         def func_wrapper(*args: Tuple, **kwargs: Dict[str, Any]):
             """
             Wraps each NON-TRANSFERRING operation, f, to ensure that all incoming tensors are on the same device and that the result has the devices correctly labelled.
 
             If no ShardedTensors are present in the input, then no changes are made to input/output.
             """
-            from .utils import tranfer_shards_if_needed
-
             sharded_tensors = []
             for value in itertools.chain(args, kwargs.values()):
                 if isinstance(value, ShardedTensor):
@@ -103,7 +121,7 @@ def sharded_wrap_override():
             if len(sharded_tensors) == 0:
                 return res
 
-            return tranfer_shards_if_needed(res, sharded_tensors[0].devices)
+            return label_devices_if_needed(res, sharded_tensors[0].devices)
 
         func_wrapper._impl_name = getattr(f, "_impl_name", None)  # For impl selection
         return func_wrapper
