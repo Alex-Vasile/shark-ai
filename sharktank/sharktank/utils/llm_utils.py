@@ -792,6 +792,16 @@ class LlmPerplexityEval:
             results.extend(cross_entropy)
         return results
 
+    def batch_decode_perplexity(self, requests: list[list[int]]):
+        bs = self.decode_bs
+        results = []
+        while len(requests) > 0:
+            batch = requests[:bs]
+            requests = requests[bs:]
+            cross_entropy = self.decode_cross_entropy(requests=batch)
+            results.extend(cross_entropy)
+        return results
+
     def run_dataset(self, dataset: Dataset, tokenizer, **kwargs):
         name = dataset.dataset
         revision = dataset.revision
@@ -804,6 +814,7 @@ class LlmPerplexityEval:
         encoded = [ids[:len] for ids, len in zip(encoded, lens)]
 
         results = self.batch_prefill_perplexity(requests=encoded, **kwargs)
+        # results = self.batch_decode_perplexity(requests=encoded)
 
         scores = {str(id): result.score for id, result in zip(ids, results)}
         return self.Dataset(
