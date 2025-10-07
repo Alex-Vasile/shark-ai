@@ -194,12 +194,13 @@ class PagedLlmModelV1(BaseCausalLMModel):
         tokens = transfer_between_blocks(
             tokens, curr_block_tensors=self.theta.tensor("blk", 0)
         )
-        h = self.token_embedding(tokens)
+        # h = self.token_embedding(tokens)
+        h = tokens.unsqueeze(1).repeat(1, 1, 16384).to(torch.float16)
         self.trace_tensor("llama.token_embedding", h)
 
         # TODO: Get the normalization factor via configuration
-        if self.inference_norm:
-            h *= math.sqrt(h.shape[-1])
+        # if self.inference_norm:
+        # h *= math.sqrt(h.shape[-1])
 
         # Iterate over attention blocks.
         for block_idx, block in enumerate(self.attn_blocks):
