@@ -167,12 +167,15 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
 
         xq, xk, xv = self.pre_process_attention(h, embedding, start_positions)
 
-        xq = xq.flatten(*self.dims_to_flatten).to(h.dtype)
+        # xq = xq.flatten(*self.dims_to_flatten).to(h.dtype)
+
         xv = xv.flatten(*self.dims_to_flatten).to(h.dtype)
         xv = xv.repeat(1, 1, self.head_count // self.head_count_kv)
+
         xk = xk.flatten(*self.dims_to_flatten).to(h.dtype)
         xk = xk.repeat(1, 1, self.head_count // self.head_count_kv)
-        res = xq + xv + xk
+
+        res = xv + xk
         return res
 
         # return res.to(h.dtype)
@@ -375,6 +378,7 @@ class PagedLlamaGQAttentionBlock(PagedLlamaAttentionBlock):
     ):
 
         xq, xk, xv = self._project_qkv(x)
+        return xq, xk, xv
 
         # if self.use_rope:
         # xq = embedding.forward(xt=xq, start_positions=start_positions)
