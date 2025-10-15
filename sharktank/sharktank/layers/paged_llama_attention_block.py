@@ -173,6 +173,15 @@ class PagedLlamaAttentionBlock(ABC, ThetaLayer):
 
         xq, xk, xv = self.pre_process_attention(x, embedding, start_positions)
 
+        xv = xv.flatten(*self.dims_to_flatten).to(h.dtype)
+        xv = xv.repeat(1, 1, self.head_count // self.head_count_kv)
+
+        xk = xk.flatten(*self.dims_to_flatten).to(h.dtype)
+        xk = xk.repeat(1, 1, self.head_count // self.head_count_kv)
+
+        res = xv + xk
+        return res
+
         if self.use_qk_norm:
             xq = self.qk_norm(xq)
             xk = self.qk_norm(xk)
