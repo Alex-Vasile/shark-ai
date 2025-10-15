@@ -582,7 +582,7 @@ def elementwise_binary_replicated_lhs_unsharded_rhs(
 
 
 @elementwise.override(Tensor, ReplicatedTensor)
-def elementwise_binary_replicated_lhs_unsharded_rhs(
+def elementwise_binary_unsharded_lhs_replicated_rhs(
     operator, x: Tensor, y: ReplicatedTensor, *args, **kwargs
 ):
     x_replicated = reshard_like(x, like=y)

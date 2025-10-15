@@ -52,8 +52,11 @@ class CachedRotaryLayer(BaseLayer):
         batch_seq_len: int | torch.SymInt,
     ) -> tuple[InferenceTensor, InferenceTensor]:
 
-        positions_seq = torch.arange(0, batch_seq_len, device=self._device)
-        positions_seq = positions_seq.unsqueeze(0)
+        positions_seq = torch.arange(0, batch_seq_len, device=self._device).unsqueeze(0)
+        if isinstance(start_positions, ReplicatedTensor):
+            assert start_positions.shard_count == 1
+            positions_seq = ReplicatedTensor(ts=[positions_seq], devices=start_positions.devices)
+        
         if start_positions is not None:
             positions_seq = positions_seq + start_positions.unsqueeze(1)
         table_0, table_1 = self._rotary_embed_table(positions_seq)
