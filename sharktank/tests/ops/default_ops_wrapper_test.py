@@ -20,7 +20,7 @@ class DefaultOpsWrapperTest(unittest.TestCase):
         t1 = torch.rand(2, 3, dtype=torch.float32)
         t2 = torch.rand(2, 3, dtype=torch.float32)
         result = ops.cat([t1, t2], dim=0)
-        
+
         self.assertIsInstance(result, torch.Tensor)
         self.assertNotIsInstance(result, DefaultPrimitiveTensor)
         self.assertEqual(tuple(result.shape), (4, 3))
@@ -30,7 +30,7 @@ class DefaultOpsWrapperTest(unittest.TestCase):
         t1 = DefaultPrimitiveTensor(data=torch.rand(2, 3, dtype=torch.float32))
         t2 = DefaultPrimitiveTensor(data=torch.rand(2, 3, dtype=torch.float32))
         result = ops.cat([t1, t2], dim=0)
-        
+
         self.assertIsInstance(result, DefaultPrimitiveTensor)
         self.assertEqual(tuple(result.shape), (4, 3))
 
@@ -39,7 +39,7 @@ class DefaultOpsWrapperTest(unittest.TestCase):
         t1 = DefaultPrimitiveTensor(data=torch.rand(2, 3, dtype=torch.float32))
         t2 = torch.rand(2, 3, dtype=torch.float32)
         result = ops.cat([t1, t2], dim=0)
-        
+
         self.assertIsInstance(result, DefaultPrimitiveTensor)
         self.assertEqual(tuple(result.shape), (4, 3))
 
@@ -48,7 +48,7 @@ class DefaultOpsWrapperTest(unittest.TestCase):
         t1 = torch.rand(2, 3, dtype=torch.float32)
         t2 = DefaultPrimitiveTensor(data=torch.rand(2, 3, dtype=torch.float32))
         result = ops.cat([t1, t2], dim=0)
-        
+
         self.assertIsInstance(result, DefaultPrimitiveTensor)
         self.assertEqual(tuple(result.shape), (4, 3))
 
@@ -57,7 +57,7 @@ class DefaultOpsWrapperTest(unittest.TestCase):
         t1 = torch.rand(3, 4, dtype=torch.float32)
         t2 = torch.rand(4, 5, dtype=torch.float32)
         result = ops.matmul(t1, t2)
-        
+
         self.assertIsInstance(result, torch.Tensor)
         self.assertNotIsInstance(result, DefaultPrimitiveTensor)
         self.assertEqual(tuple(result.shape), (3, 5))
@@ -67,7 +67,7 @@ class DefaultOpsWrapperTest(unittest.TestCase):
         t1 = DefaultPrimitiveTensor(data=torch.rand(3, 4, dtype=torch.float32))
         t2 = torch.rand(4, 5, dtype=torch.float32)
         result = ops.matmul(t1, t2)
-        
+
         self.assertIsInstance(result, DefaultPrimitiveTensor)
         self.assertEqual(tuple(result.shape), (3, 5))
 
@@ -76,7 +76,7 @@ class DefaultOpsWrapperTest(unittest.TestCase):
         t1 = torch.rand(3, 4, dtype=torch.float32)
         t2 = DefaultPrimitiveTensor(data=torch.rand(4, 5, dtype=torch.float32))
         result = ops.matmul(t1, t2)
-        
+
         self.assertIsInstance(result, DefaultPrimitiveTensor)
         self.assertEqual(tuple(result.shape), (3, 5))
 
@@ -85,7 +85,7 @@ class DefaultOpsWrapperTest(unittest.TestCase):
         t1 = DefaultPrimitiveTensor(data=torch.rand(3, 4, dtype=torch.float32))
         t2 = DefaultPrimitiveTensor(data=torch.rand(4, 5, dtype=torch.float32))
         result = ops.matmul(t1, t2)
-        
+
         self.assertIsInstance(result, DefaultPrimitiveTensor)
         self.assertEqual(tuple(result.shape), (3, 5))
 
@@ -94,7 +94,7 @@ class DefaultOpsWrapperTest(unittest.TestCase):
         t1 = torch.rand(3, 4, dtype=torch.float32)
         t2 = torch.rand(3, 4, dtype=torch.float32)
         result = ops.elementwise(lambda x, y: x + y, t1, t2)
-        
+
         self.assertIsInstance(result, torch.Tensor)
         self.assertNotIsInstance(result, DefaultPrimitiveTensor)
         self.assertEqual(tuple(result.shape), (3, 4))
@@ -104,7 +104,7 @@ class DefaultOpsWrapperTest(unittest.TestCase):
         t1 = DefaultPrimitiveTensor(data=torch.rand(3, 4, dtype=torch.float32))
         t2 = torch.rand(3, 4, dtype=torch.float32)
         result = ops.elementwise(lambda x, y: x + y, t1, t2)
-        
+
         self.assertIsInstance(result, DefaultPrimitiveTensor)
         self.assertEqual(tuple(result.shape), (3, 4))
 

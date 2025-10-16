@@ -47,13 +47,14 @@ import iree.turbine.ops.iree
 def default_wrap_override():
     """
     Wraps all default op overrides to preserve DefaultPrimitiveTensor type.
-    
+
     For each op, applies a wrapper that:
     1. Detects if any input is a PrimitiveTensor
     2. Unwraps all PrimitiveTensor inputs to torch.Tensor
     3. Calls the underlying function with only torch.Tensors
     4. Re-wraps the result in DefaultPrimitiveTensor if input had PrimitiveTensor
     """
+
     def preserve_primitive_tensor(f):
         """
         Wrapper for each default op to preserve DefaultPrimitiveTensor return type
@@ -64,12 +65,12 @@ def default_wrap_override():
             """
             Wraps each operation, f, to ensure that if any input is a PrimitiveTensor,
             the output is wrapped back in DefaultPrimitiveTensor.
-            
+
             If no PrimitiveTensors are present in the input, then torch.Tensor is returned.
             """
             primitive_tensors = []
             unwrapped_args = []
-            
+
             # Process args
             for value in args:
                 if isinstance(value, PrimitiveTensor):
@@ -86,7 +87,7 @@ def default_wrap_override():
                     unwrapped_args.append(type(value)(unwrapped_list))
                 else:
                     unwrapped_args.append(value)
-            
+
             # Process kwargs
             unwrapped_kwargs = {}
             for k, value in kwargs.items():
@@ -95,10 +96,10 @@ def default_wrap_override():
                     unwrapped_kwargs[k] = unbox_tensor(value)
                 else:
                     unwrapped_kwargs[k] = value
-            
+
             # Call the underlying function with unwrapped tensors
             res = f(*unwrapped_args, **unwrapped_kwargs)
-            
+
             # Re-wrap if input was PrimitiveTensor
             if len(primitive_tensors) > 0 and isinstance(res, torch.Tensor):
                 res = DefaultPrimitiveTensor(data=res)
