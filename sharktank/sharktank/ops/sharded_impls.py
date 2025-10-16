@@ -109,6 +109,9 @@ def sharded_wrap_override():
             return res
 
         func_wrapper._impl_name = getattr(f, "_impl_name", None)  # For impl selection
+        func_wrapper.__wrapped__ = (
+            f  # Store reference to original function for _TEST_LAST_OP_DISPATCH
+        )
         return func_wrapper
 
     def wrap_override(signature_dispatcher_override):
@@ -1491,14 +1494,15 @@ def scatter_split_split(
     else:
         # If the shapes are not the same it means that:
         #   1. Not all slices along dim inside `inout` will be accessed (so we can decrease computation)
-        #   2. Slices indo shards of `index` and `inout` will not line up,
+        #   2. Slices into shards of `index` and `inout` will not line up,
         #      i.e. The slice index_shard_i[j] will not match up to inout_shard_i[j]
-        index = all_gather(index)
+        _index = index
+        index = sharded_cat(_index)
 
         # Find the last shard of `inout` that will be accessed.
         slice_indices_inout = [shard.shape[shard_dim] for shard in inout.shards]
         cumulative_slice_idx = list(itertools.accumulate(slice_indices_inout))
-        final_slice_idx = index.shards[0].shape[shard_dim]  # Replicated, all the same
+        final_slice_idx = index.shape[shard_dim]
         last_shard_idx = max(
             i for i, val in enumerate(cumulative_slice_idx) if val <= final_slice_idx
         )
@@ -1513,7 +1517,7 @@ def scatter_split_split(
         assert num_slices_left == 0
         index_shards = unbox_tensor(index).split(size_along_shard_dim, dim=shard_dim)
         index_shards = [
-            transfer_to_logical_device(shard, index.devices[i])
+            transfer_to_logical_device(shard, _index.devices[i])
             for i, shard in enumerate(index_shards)
         ]
         assert len(index_shards) == last_shard_idx + 1

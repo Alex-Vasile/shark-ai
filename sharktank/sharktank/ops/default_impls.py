@@ -39,6 +39,233 @@ from .signatures import *
 import iree.turbine.ops.iree
 
 
+def default_wrap_override():
+    """
+    Wraps all default op overrides to preserve DefaultPrimitiveTensor type.
+
+    For each op, applies a wrapper that:
+    1. Detects if any input is a PrimitiveTensor
+    2. Unwraps all PrimitiveTensor inputs to torch.Tensor
+    3. Calls the underlying function with only torch.Tensors
+    4. Re-wraps the result in DefaultPrimitiveTensor if input had PrimitiveTensor
+    """
+
+    def preserve_primitive_tensor(f):
+        """
+        Wrapper for each default op to preserve DefaultPrimitiveTensor return type
+        if a DefaultPrimitiveTensor was provided as input.
+        """
+
+        def func_wrapper(*args: Tuple, **kwargs: dict):
+            """
+            Wraps each operation, f, to ensure that if any input is a PrimitiveTensor,
+            the output is wrapped back in DefaultPrimitiveTensor.
+
+            If no PrimitiveTensors are present in the input, then torch.Tensor is returned.
+            """
+            primitive_tensors = []
+            unwrapped_args = []
+
+            # Process args
+            for value in args:
+                if isinstance(value, PrimitiveTensor):
+                    primitive_tensors.append(value)
+                    unwrapped_args.append(unbox_tensor(value))
+                elif isinstance(value, Sequence) and not isinstance(value, str):
+                    unwrapped_list = []
+                    for v in value:
+                        if isinstance(v, PrimitiveTensor):
+                            primitive_tensors.append(v)
+                            unwrapped_list.append(unbox_tensor(v))
+                        else:
+                            unwrapped_list.append(v)
+                    unwrapped_args.append(type(value)(unwrapped_list))
+                else:
+                    unwrapped_args.append(value)
+
+            # Process kwargs
+            unwrapped_kwargs = {}
+            for k, value in kwargs.items():
+                if isinstance(value, PrimitiveTensor):
+                    primitive_tensors.append(value)
+                    unwrapped_kwargs[k] = unbox_tensor(value)
+                else:
+                    unwrapped_kwargs[k] = value
+
+            # Call the underlying function with unwrapped tensors
+            res = f(*unwrapped_args, **unwrapped_kwargs)
+
+            # Re-wrap if input was PrimitiveTensor
+            if len(primitive_tensors) > 0 and isinstance(res, torch.Tensor):
+                res = DefaultPrimitiveTensor(data=res)
+            return res
+
+        func_wrapper._impl_name = getattr(f, "_impl_name", None)  # For impl selection
+        func_wrapper.__wrapped__ = (
+            f  # Store reference to original function for _TEST_LAST_OP_DISPATCH
+        )
+        return func_wrapper
+
+    def wrap_override(signature_dispatcher_override):
+        """
+        Wrap [op].override's result so that the preserve_primitive_tensor(f) becomes the target in _TargetOverride rather than f itself.
+        """
+
+        def override_return_wrapper(*override_args, **override_kwargs):
+            orig_decorator = signature_dispatcher_override(
+                *override_args, **override_kwargs
+            )
+            new_decorator = lambda f: orig_decorator(preserve_primitive_tensor(f))
+            return new_decorator
+
+        return override_return_wrapper
+
+    do_not_wrap = {
+        "dequantize",
+        "quantize",
+        "unpack_qs",
+        "unpack_to_qs",
+    }
+
+    from . import signatures
+
+    for func_name in signatures.__all__:
+        func = globals()[func_name]
+        if (func_name not in do_not_wrap) and (hasattr(func, "override")):
+            func.override_orig = func.override
+            func.override = wrap_override(func.override_orig)
+
+
+def default_unwrap_override():
+    """
+    Unwraps [op].override to restore the original function.
+    Must be called at the end of this file.
+    """
+    from . import signatures
+
+    for func_name in signatures.__all__:
+        func = globals()[func_name]
+        if hasattr(func, "override_orig"):
+            func.override = func.override_orig
+            del func.override_orig
+
+
+# Wrap all op overrides to preserve DefaultPrimitiveTensor - must be called before first override
+default_wrap_override()
+
+
+def default_wrap_override():
+    """
+    Wraps all default op overrides to preserve DefaultPrimitiveTensor type.
+
+    For each op, applies a wrapper that:
+    1. Detects if any input is a PrimitiveTensor
+    2. Unwraps all PrimitiveTensor inputs to torch.Tensor
+    3. Calls the underlying function with only torch.Tensors
+    4. Re-wraps the result in DefaultPrimitiveTensor if input had PrimitiveTensor
+    """
+
+    def preserve_primitive_tensor(f):
+        """
+        Wrapper for each default op to preserve DefaultPrimitiveTensor return type
+        if a DefaultPrimitiveTensor was provided as input.
+        """
+
+        def func_wrapper(*args: Tuple, **kwargs: dict):
+            """
+            Wraps each operation, f, to ensure that if any input is a PrimitiveTensor,
+            the output is wrapped back in DefaultPrimitiveTensor.
+
+            If no PrimitiveTensors are present in the input, then torch.Tensor is returned.
+            """
+            primitive_tensors = []
+            unwrapped_args = []
+
+            # Process args
+            for value in args:
+                if isinstance(value, PrimitiveTensor):
+                    primitive_tensors.append(value)
+                    unwrapped_args.append(unbox_tensor(value))
+                elif isinstance(value, Sequence) and not isinstance(value, str):
+                    unwrapped_list = []
+                    for v in value:
+                        if isinstance(v, PrimitiveTensor):
+                            primitive_tensors.append(v)
+                            unwrapped_list.append(unbox_tensor(v))
+                        else:
+                            unwrapped_list.append(v)
+                    unwrapped_args.append(type(value)(unwrapped_list))
+                else:
+                    unwrapped_args.append(value)
+
+            # Process kwargs
+            unwrapped_kwargs = {}
+            for k, value in kwargs.items():
+                if isinstance(value, PrimitiveTensor):
+                    primitive_tensors.append(value)
+                    unwrapped_kwargs[k] = unbox_tensor(value)
+                else:
+                    unwrapped_kwargs[k] = value
+
+            # Call the underlying function with unwrapped tensors
+            res = f(*unwrapped_args, **unwrapped_kwargs)
+
+            # Re-wrap if input was PrimitiveTensor
+            if len(primitive_tensors) > 0 and isinstance(res, torch.Tensor):
+                res = DefaultPrimitiveTensor(data=res)
+            return res
+
+        func_wrapper._impl_name = getattr(f, "_impl_name", None)  # For impl selection
+        return func_wrapper
+
+    def wrap_override(signature_dispatcher_override):
+        """
+        Wrap [op].override's result so that the preserve_primitive_tensor(f) becomes the target in _TargetOverride rather than f itself.
+        """
+
+        def override_return_wrapper(*override_args, **override_kwargs):
+            orig_decorator = signature_dispatcher_override(
+                *override_args, **override_kwargs
+            )
+            new_decorator = lambda f: orig_decorator(preserve_primitive_tensor(f))
+            return new_decorator
+
+        return override_return_wrapper
+
+    do_not_wrap = {
+        "dequantize",
+        "quantize",
+        "unpack_qs",
+        "unpack_to_qs",
+    }
+
+    from . import signatures
+
+    for func_name in signatures.__all__:
+        func = globals()[func_name]
+        if (func_name not in do_not_wrap) and (hasattr(func, "override")):
+            func.override_orig = func.override
+            func.override = wrap_override(func.override_orig)
+
+
+def default_unwrap_override():
+    """
+    Unwraps [op].override to restore the original function.
+    Must be called at the end of this file.
+    """
+    from . import signatures
+
+    for func_name in signatures.__all__:
+        func = globals()[func_name]
+        if hasattr(func, "override_orig"):
+            func.override = func.override_orig
+            del func.override_orig
+
+
+# Wrap all op overrides to preserve DefaultPrimitiveTensor - must be called before first override
+default_wrap_override()
+
+
 @abs.override(Tensor)
 def abs_default(tensor: Tensor) -> Tensor:
     return torch.abs(unbox_tensor(tensor))
@@ -114,8 +341,6 @@ def _split_argmax(input_tensor, dim, keepdim: bool = False, chunk_size: int = 12
 @cat.override(AllOfType(Tensor, PrimitiveTensor))
 def cat_default(tensors: Sequence[Tensor | PrimitiveTensor], dim: int):
     result = torch.cat([unbox_tensor(t) for t in tensors], dim)
-    if isinstance(tensors[0], PrimitiveTensor):
-        result = DefaultPrimitiveTensor(data=result)
     return result
 
 
@@ -374,7 +599,7 @@ def embedding_lookup_Tensor_QuantizedTensor(
 
 @equal.override(AllOfType(Tensor, InferenceTensor))
 def equal_default(a: Tensor | InferenceTensor, b: Tensor | InferenceTensor) -> bool:
-    return torch.equal(unbox_tensor(a), unbox_tensor(b))
+    return torch.equal(unbox_tensor(a), unbox_tensor(b))  # Must unbox
 
 
 @expand.override(Tensor)
@@ -1255,3 +1480,6 @@ def zeros_like_default(
     device: torch.device | None,
 ) -> Tensor:
     return torch.zeros_like(unbox_tensor(tensor), dtype=dtype, device=device)
+
+
+default_unwrap_override()

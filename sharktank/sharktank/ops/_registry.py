@@ -270,7 +270,9 @@ class SignatureDispatcher:
         selected_override, *results = trampoline(self, *args, **kwargs)
         if _ENABLE_TEST_LAST_OP_DISPATCH:
             global _TEST_LAST_OP_DISPATCH
-            _TEST_LAST_OP_DISPATCH = selected_override
+            _TEST_LAST_OP_DISPATCH = getattr(
+                selected_override, "__wrapped__", selected_override
+            )
         arity = len(results)
         if arity == 1:
             return results[0]
