@@ -8,7 +8,8 @@ from typing import Optional
 
 import torch
 
-from sharktank.types.tensors import AnyTensor, InferenceTensor, ReplicatedTensor
+import sharktank.ops as ops
+from sharktank.types.tensors import AnyTensor, InferenceTensor
 
 from .base import BaseLayer
 from .rotary_embedding_hf import RotaryEmbeddingLayer
@@ -42,7 +43,9 @@ class CachedRotaryLayer(BaseLayer):
     ) -> InferenceTensor:
         batch_seq_len = xt.shape[1]
         mask = self.compute_batch_mask(
-            start_positions=start_positions, batch_seq_len=batch_seq_len
+            start_positions=start_positions,
+            batch_seq_len=batch_seq_len,
+            devices=getattr(xt, "devices", None),
         )
         return self.apply_batched_mask(xt=xt, mask=mask)
 
@@ -50,13 +53,13 @@ class CachedRotaryLayer(BaseLayer):
         self,
         start_positions: Optional[AnyTensor],
         batch_seq_len: int | torch.SymInt,
+        devices: tuple[int, ...] | None = None,
     ) -> tuple[InferenceTensor, InferenceTensor]:
 
-        positions_seq = torch.arange(0, batch_seq_len, device=self._device).unsqueeze(0)
-        if isinstance(start_positions, ReplicatedTensor):
-            assert start_positions.shard_count == 1
-            positions_seq = ReplicatedTensor(ts=[positions_seq], devices=start_positions.devices)
-        
+        positions_seq = ops.arange(
+            0, batch_seq_len, device=self._device, devices=devices
+        ).unsqueeze(0)
+
         if start_positions is not None:
             positions_seq = positions_seq + start_positions.unsqueeze(1)
         table_0, table_1 = self._rotary_embed_table(positions_seq)

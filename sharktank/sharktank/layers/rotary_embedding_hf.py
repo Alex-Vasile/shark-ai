@@ -130,7 +130,7 @@ class RotaryEmbeddingLayer(BaseLayer):
         self.yarn_original_context_len = yarn_original_context_len
         self.use_base_frequency_scaling = use_base_frequency_scaling
 
-    def _compute_theta(self, device):
+    def _compute_theta(self, device: str, devices: tuple[int, ...] | None = None):
         # TODO: Add rope scaling.
         dim = self.head_dim
         # The original paper creates a d/2 dimensional space to represent
@@ -143,7 +143,10 @@ class RotaryEmbeddingLayer(BaseLayer):
         if self.use_base_frequency_scaling:
             # gpt-oss base freqs:base^(i/d)
             freqs = self.rope_theta ** (
-                torch.arange(0, dim, 2, device=device, dtype=torch.float32) / dim
+                ops.arange(
+                    0, dim, 2, device=device, dtype=torch.float32, devices=devices
+                )
+                / dim
             )
             # Returning freq and concentration.
             concentration, inv_freqs = self._apply_yarn_base_freq(freqs)
@@ -155,7 +158,12 @@ class RotaryEmbeddingLayer(BaseLayer):
         else:
             freqs = 1.0 / (
                 self.rope_theta
-                ** (torch.arange(0, dim, 2, device=device).to(torch.float32) / dim)
+                ** (
+                    ops.arange(
+                        0, dim, 2, device=device, dtype=torch.float32, devices=devices
+                    )
+                    / dim
+                )
             )
             inv_freqs = self._apply_yarn(freqs)
             concentration = torch.tensor(1.0, device=device, dtype=torch.float32)
@@ -203,7 +211,7 @@ class RotaryEmbeddingLayer(BaseLayer):
             freqs = torch.where(is_medium_freq, smoothed_inv_freq, inv_freq_llama)
         return freqs
 
-    def _apply_yarn_base_freq(self, freqs):
+    def _apply_yarn_base_freq(self, freqs: AnyTensor):
         """See YaRN paper: https://arxiv.org/abs/2309.00071
         Base frequency YaRN variant.
         Input:
@@ -226,6 +234,7 @@ class RotaryEmbeddingLayer(BaseLayer):
         yarn_original_context_len = self.yarn_original_context_len
 
         if scaling_factor > 1.0:
+            devices: tuple[int, ...] | None = getattr(freqs, "devices", None)
             concentration = 0.1 * math.log(scaling_factor) + 1.0
             d_half = self.head_dim // 2
             # NTK by part
@@ -243,7 +252,10 @@ class RotaryEmbeddingLayer(BaseLayer):
             interpolation = 1.0 / (scaling_factor * freqs)
             extrapolation = 1.0 / freqs
             ramp = (
-                torch.arange(d_half, dtype=torch.float32, device=freqs.device) - low
+                ops.arange(
+                    d_half, dtype=torch.float32, device=freqs.device, devices=devices
+                )
+                - low
             ) / (high - low)
             mask = 1 - ramp.clamp(0, 1)
             inv_freq = interpolation * (1 - mask) + extrapolation * mask
@@ -255,8 +267,8 @@ class RotaryEmbeddingLayer(BaseLayer):
         return concentration, inv_freq
 
     def compute_sincos_cache(
-        self, position_ids: torch.Tensor, dtype: torch.dtype
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self, position_ids: AnyTensor, dtype: torch.dtype
+    ) -> tuple[AnyTensor, AnyTensor]:
         """
         Precompute a sin/cos cache based on position_ids. This cache can
         generally be used across. We could also rely on the compiler to do CSE,
@@ -275,12 +287,9 @@ class RotaryEmbeddingLayer(BaseLayer):
         Note:
             - When use_base_frequency_scaling is enabled, a concentration scalar may scale cos/sin.
         """
-        concentration, inv_freq = self._compute_theta(device=position_ids.device)
-        if isinstance(position_ids, ReplicatedTensor):
-            assert position_ids.shard_count == 1
-            concentration = ReplicatedTensor(ts=[concentration], devices=position_ids.devices)
-            inv_freq = ReplicatedTensor(ts=[inv_freq], devices=position_ids.devices)
-
+        concentration, inv_freq = self._compute_theta(
+            device=position_ids.device, devices=getattr(position_ids, "devices", None)
+        )
         # [bs, d_half, 1] x [bs, 1, seq_len] -> [bs, d_half, seq_len] -> [bs, seq_len, d_half]
         theta_expanded = (
             inv_freq[None, :, None]
