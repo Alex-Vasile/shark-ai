@@ -573,22 +573,6 @@ def elementwise_binary_replicated_lhs_unreduced_rhs(
     return elementwise(operator, x, y_replicated, *args, **kwargs)
 
 
-@elementwise.override(ReplicatedTensor, Tensor)
-def elementwise_binary_replicated_lhs_unsharded_rhs(
-    operator, x: ReplicatedTensor, y: Tensor, *args, **kwargs
-):
-    y_replicated = reshard_like(y, like=x)
-    return elementwise(operator, x, y_replicated, *args, **kwargs)
-
-
-@elementwise.override(Tensor, ReplicatedTensor)
-def elementwise_binary_unsharded_lhs_replicated_rhs(
-    operator, x: Tensor, y: ReplicatedTensor, *args, **kwargs
-):
-    x_replicated = reshard_like(x, like=y)
-    return elementwise(operator, x_replicated, y, *args, **kwargs)
-
-
 @expand.override(SplitPrimitiveTensor)
 def expand_split(
     tensor: SplitPrimitiveTensor, shape: List[int]
