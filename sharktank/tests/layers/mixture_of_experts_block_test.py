@@ -12,7 +12,7 @@ import torch
 from iree.turbine.aot import *
 from sharktank.layers.testing import make_random_moe_block_theta
 from sharktank.utils.random import make_rand_torch
-from sharktank.utils.testing import assert_tensor_close
+from sharktank.utils.testing import assert_iterables_equal, assert_tensor_close
 from sharktank.layers.mixture_of_experts_block import MoeBlock
 from sharktank.types.sharding import MoeBlockSharding
 from sharktank.ops import reshard, reshard_like, replicate, swiglu, cat
@@ -388,8 +388,8 @@ class MoeBlockTest(unittest.TestCase):
 
         output = moe(input_tensor)
 
-        self.assertEqual(output.shape, input_tensor.shape)
-        self.assertTrue(torch.isfinite(output).all(), "Output is finite")
+        assert_iterables_equal(output.shape, input_tensor.shape)
+        self.assertTrue(torch.isfinite(unbox_tensor(output)).all(), "Output is finite")
 
         topk_logits = captured["logits"]
         probs = captured["probs"]
@@ -457,9 +457,9 @@ class MoeBlockTest(unittest.TestCase):
 
         # Verify dtype is preserved
         self.assertEqual(output.dtype, dtype, f"Expected {dtype}, got {output.dtype}")
-        self.assertEqual(output.shape, input_tensor.shape)
+        assert_iterables_equal(output.shape, input_tensor.shape)
         self.assertTrue(
-            torch.isfinite(output).all(),
+            torch.isfinite(unbox_tensor(output)).all(),
             f"Output does not contain infinite for dtype {dtype}",
         )
 

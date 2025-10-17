@@ -104,7 +104,7 @@ class TestTensorConversion(TestCase):
         with_iree_device_context(roundtrip, iree_devices)
 
     def testTensorToDeviceArraySupportsDefaultPrimitiveTensor(self):
-        tensor = DefaultPrimitiveTensor(data=torch.arange(1, 4, dtype=int))
+        tensor = ops.arange(1, 4, dtype=int)
 
         iree_devices = get_iree_devices(device=self.iree_device, device_count=1)
 
