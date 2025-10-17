@@ -501,7 +501,7 @@ def dequantize_planes_split_replicated_static_scaled_quantizer(
 
 @elementwise.override(SplitPrimitiveTensor)
 def split_elementwise_unary(operator, x: SplitPrimitiveTensor, *args, **kwargs):
-    partials = [operator(unbox_tensor(pt), *args, **kwargs) for pt in x.shards]
+    partials = [elementwise(operator, pt, *args, **kwargs) for pt in x.shards]
     return SplitPrimitiveTensor(shard_dim=x.shard_dim, shape=x.shape, ts=partials)
 
 
@@ -512,10 +512,9 @@ def split_elementwise_binary(
     assert x.shard_count == y.shard_count
     x_shard_dim, y_shard_dim = broadcast_dims([x.shard_dim, y.shard_dim], [x, y])
     assert x_shard_dim == y_shard_dim
-    pt_xs = [unbox_tensor(pt) for pt in x.shards]
-    pt_ys = [unbox_tensor(pt) for pt in y.shards]
     partials = [
-        operator(pt_x, pt_y, *args, **kwargs) for pt_x, pt_y in zip(pt_xs, pt_ys)
+        elementwise(operator, x_shard, y_shard, *args, **kwargs)
+        for x_shard, y_shard in zip(x.shards, y.shards)
     ]
     return SplitPrimitiveTensor(
         shard_dim=x_shard_dim,
@@ -528,8 +527,9 @@ def split_elementwise_binary(
 def elementwise_binary_split_lhs_scalar_rhs(
     operator, x: SplitPrimitiveTensor, y: Number, *args, **kwargs
 ):
-    pt_xs = [unbox_tensor(pt) for pt in x.shards]
-    partials = [operator(pt_x, y, *args, **kwargs) for pt_x in pt_xs]
+    partials = [
+        elementwise(operator, x_shard, y, *args, **kwargs) for x_shard in x.shards
+    ]
     return SplitPrimitiveTensor(shard_dim=x.shard_dim, shape=x.shape, ts=partials)
 
 
@@ -775,8 +775,8 @@ def interpolate_split_batch_or_channel(
 ) -> SplitPrimitiveTensor:
     assert input.shard_dim == 0 or input.shard_dim == 1
     shards = [
-        torch.nn.functional.interpolate(
-            input=unbox_tensor(shard),
+        interpolate(
+            input=shard,
             size=size,
             scale_factor=scale_factor,
             mode=mode,
@@ -896,12 +896,11 @@ def matmul_split_lhs(
 
 @matmul.override(Tensor, SplitPrimitiveTensor)
 def matmul_split_rhs(
-    lhs, rhs: SplitPrimitiveTensor, *, transpose_rhs: bool
+    lhs: Tensor, rhs: SplitPrimitiveTensor, *, transpose_rhs: bool
 ) -> SplitPrimitiveTensor:
     # When multiplying (unsharded, split), the rhs must be split by column.
     # In a transposed configuration, this is axis 0, otherwise 1.
     # This will result in a ShardedTensor, split by column.
-    lhs = unbox_tensor(lhs)
     rhs_shard_dim = rhs.shard_dim
     if transpose_rhs:
         assert (
@@ -1235,9 +1234,9 @@ def replicate_unreduced(
 
 @replicate.override(Tensor)
 def replicate_unsharded(input, *, count: int, devices: Tuple[int]) -> ReplicatedTensor:
-    torch_input = unbox_tensor(input)
     assert count == len(devices)
-    return ReplicatedTensor(ts=torch_input, shard_count=count, devices=devices)
+    # Leaving explicit unbox so that ReplicatedTensor can rename shards to expected format.
+    return ReplicatedTensor(ts=unbox_tensor(input), shard_count=count, devices=devices)
 
 
 @reshape.override(ReplicatedTensor)
@@ -1363,7 +1362,7 @@ def reshard_split_replicated(
 
     shard_size_along_dim = input.shape[dim] // count
     shards = [
-        unbox_tensor(shard)[
+        shard[
             slice_range_along_dim(
                 dim=dim,
                 start=shard_idx * shard_size_along_dim,
@@ -1384,8 +1383,7 @@ def reshard_like_unsharded_to_unsharded(input, like: Tensor) -> Tensor:
 def reshard_like_unsharded_to_split(
     input, like: SplitPrimitiveTensor
 ) -> SplitPrimitiveTensor:
-    torch_input = unbox_tensor(input)
-    return reshard_split(torch_input, dim=like.shard_dim, count=like.shard_count)
+    return reshard_split(input, dim=like.shard_dim, count=like.shard_count)
 
 
 @reshard_like.override(ReplicatedTensor, Tensor)
@@ -1402,8 +1400,7 @@ def reshard_like_split_to_unsharded(input: SplitPrimitiveTensor, like):
 def reshard_like_unsharded_to_replicated(
     tensor, like: ReplicatedTensor
 ) -> ReplicatedTensor:
-    torch_tensor = unbox_tensor(tensor)
-    return replicate(torch_tensor, count=like.shard_count, devices=like.devices)
+    return replicate(tensor, count=like.shard_count, devices=like.devices)
 
 
 @reshard_like.override(ReplicatedTensor, ReplicatedTensor)
@@ -1515,7 +1512,7 @@ def scatter_split_split(
             size_along_shard_dim.append(min(num_slices_left, slice_indices_inout[i]))
             num_slices_left -= size_along_shard_dim[-1]
         assert num_slices_left == 0
-        index_shards = unbox_tensor(index).split(size_along_shard_dim, dim=shard_dim)
+        index_shards = index.split(size_along_shard_dim, dim=shard_dim)
         index_shards = [
             transfer_to_logical_device(shard, _index.devices[i])
             for i, shard in enumerate(index_shards)
@@ -1525,7 +1522,7 @@ def scatter_split_split(
     for i in range(last_shard_idx + 1):
         inout.shards[i].scatter_(
             dim,
-            unbox_tensor(index_shards[i]),
+            index_shards[i],
             value,
             reduce=reduce,
         )
@@ -2127,7 +2124,7 @@ def _reshape_get_single_split_dim(
 
 @unsqueeze.override(SplitPrimitiveTensor)
 def unsqueeze_split(tensor: SplitPrimitiveTensor, dim: int) -> SplitPrimitiveTensor:
-    shards = [torch.unsqueeze(unbox_tensor(shard), dim) for shard in tensor.shards]
+    shards = [unsqueeze(shard, dim) for shard in tensor.shards]
     shard_dim = tensor.shard_dim
     dim_resolved = dim if dim >= 0 else dim + len(tensor.shape) + 1
     if shard_dim >= dim_resolved:
