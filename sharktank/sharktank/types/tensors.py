@@ -423,6 +423,14 @@ class InferenceTensor(ABC):
     def contiguous(self) -> "InferenceTensor":
         raise NotImplementedError()
 
+    def chunk(self, chunks: int, dim: int = 0) -> tuple["AnyTensor", ...]:
+        from sharktank.ops import chunk
+
+        return chunk(self, chunks, dim)
+
+    def contiguous(self) -> "InferenceTensor":
+        raise NotImplementedError()
+
     @property
     def device(self) -> torch.device:
         """Equivalent to torch.Tensor.device."""
