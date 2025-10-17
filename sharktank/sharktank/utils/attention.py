@@ -35,8 +35,8 @@ def create_causal_context_mask(
                          for each sequence in the batch.
         device: The device to place the output mask on.
     """
-    src = torch.arange(src_len, device=device)[None, None, None, :]
-    target = torch.arange(target_len, device=device)[None, None, :, None]
+    src = ops.arange(src_len, device=device)[None, None, None, :]
+    target = ops.arange(target_len, device=device)[None, None, :, None]
 
     if start_positions is not None:
         target = target + start_positions[:, None, None, None]
@@ -67,7 +67,7 @@ def create_boolean_chunked_attention_mask(
     ⬚ - masked (False).
     ■ - unmasked (True).
     """
-    arange_vector = torch.arange(start_index, end_index)
+    arange_vector = ops.arange(start_index, end_index)
     block_pos = torch.abs(
         arange_vector.unsqueeze(0) // attention_chunk_size
         - arange_vector.unsqueeze(1) // attention_chunk_size

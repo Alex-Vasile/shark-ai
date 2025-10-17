@@ -117,8 +117,8 @@ def test_rotary_interweaved(
         q = torch.randn(bs, length, heads, dims, dtype=dtype)
         k = torch.randn(bs, length, heads, dims, dtype=dtype)
 
-        start_positions = torch.arange(0, bs)
-        positions_seq = torch.arange(0, length)
+        start_positions = ops.arange(0, bs)
+        positions_seq = ops.arange(0, length)
 
         if prefill_offset:
             position_ids = positions_seq.unsqueeze(0) + start_positions.unsqueeze(1)

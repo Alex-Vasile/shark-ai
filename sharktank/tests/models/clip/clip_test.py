@@ -526,6 +526,11 @@ class ClipAttentionTest(TestCase):
             actual_outputs,
         )
 
+        tree_map(
+            lambda t: None if t is None else t.to(dtype=reference_dtype),
+            actual_outputs,
+        )
+
         assert_tensor_close(actual_outputs, expected_outputs, atol=atol, rtol=rtol)
 
 

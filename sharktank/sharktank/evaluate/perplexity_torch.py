@@ -190,7 +190,7 @@ class PerplexityTorch:
                 last_logits_indices = torch.maximum(
                     last_logits_indices, torch.tensor(0)
                 )
-                batch_indices = torch.arange(len(self.seq_lens))
+                batch_indices = ops.arange(len(self.seq_lens))
                 last_real_prefill_logits = self.batch.prefill_logits[
                     batch_indices, last_logits_indices, :
                 ].unsqueeze(1)

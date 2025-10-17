@@ -44,6 +44,118 @@ from .signatures import *
 import iree.turbine.ops.iree
 
 
+def default_wrap_override():
+    """
+    Wraps all default op overrides to preserve DefaultPrimitiveTensor type.
+
+    For each op, applies a wrapper that:
+    1. Detects if any input is a PrimitiveTensor
+    2. Unwraps all PrimitiveTensor inputs to torch.Tensor
+    3. Calls the underlying function with only torch.Tensors
+    4. Re-wraps the result in DefaultPrimitiveTensor if input had PrimitiveTensor
+    """
+
+    def preserve_primitive_tensor(f):
+        """
+        Wrapper for each default op to preserve DefaultPrimitiveTensor return type
+        if a DefaultPrimitiveTensor was provided as input.
+        """
+
+        def func_wrapper(*args: Tuple, **kwargs: dict):
+            """
+            Wraps each operation, f, to ensure that if any input is a PrimitiveTensor,
+            the output is wrapped back in DefaultPrimitiveTensor.
+
+            If no PrimitiveTensors are present in the input, then torch.Tensor is returned.
+            """
+            primitive_tensors = []
+            unwrapped_args = []
+
+            # Process args
+            for value in args:
+                if isinstance(value, PrimitiveTensor):
+                    primitive_tensors.append(value)
+                    unwrapped_args.append(unbox_tensor(value))
+                elif isinstance(value, Sequence) and not isinstance(value, str):
+                    unwrapped_list = []
+                    for v in value:
+                        if isinstance(v, PrimitiveTensor):
+                            primitive_tensors.append(v)
+                            unwrapped_list.append(unbox_tensor(v))
+                        else:
+                            unwrapped_list.append(v)
+                    unwrapped_args.append(type(value)(unwrapped_list))
+                else:
+                    unwrapped_args.append(value)
+
+            # Process kwargs
+            unwrapped_kwargs = {}
+            for k, value in kwargs.items():
+                if isinstance(value, PrimitiveTensor):
+                    primitive_tensors.append(value)
+                    unwrapped_kwargs[k] = unbox_tensor(value)
+                else:
+                    unwrapped_kwargs[k] = value
+
+            # Call the underlying function with unwrapped tensors
+            res = f(*unwrapped_args, **unwrapped_kwargs)
+
+            # Re-wrap if input was PrimitiveTensor
+            if len(primitive_tensors) > 0 and isinstance(res, torch.Tensor):
+                res = DefaultPrimitiveTensor(data=res)
+            return res
+
+        func_wrapper._impl_name = getattr(f, "_impl_name", None)  # For impl selection
+        return func_wrapper
+
+    def wrap_override(signature_dispatcher_override):
+        """
+        Wrap [op].override's result so that the preserve_primitive_tensor(f) becomes the target in _TargetOverride rather than f itself.
+        """
+
+        def override_return_wrapper(*override_args, **override_kwargs):
+            orig_decorator = signature_dispatcher_override(
+                *override_args, **override_kwargs
+            )
+            new_decorator = lambda f: orig_decorator(preserve_primitive_tensor(f))
+            return new_decorator
+
+        return override_return_wrapper
+
+    do_not_wrap = {
+        "dequantize",
+        "quantize",
+        "unpack_qs",
+        "unpack_to_qs",
+    }
+
+    from . import signatures
+
+    for func_name in signatures.__all__:
+        func = globals()[func_name]
+        if (func_name not in do_not_wrap) and (hasattr(func, "override")):
+            func.override_orig = func.override
+            func.override = wrap_override(func.override_orig)
+
+
+def default_unwrap_override():
+    """
+    Unwraps [op].override to restore the original function.
+    Must be called at the end of this file.
+    """
+    from . import signatures
+
+    for func_name in signatures.__all__:
+        func = globals()[func_name]
+        if hasattr(func, "override_orig"):
+            func.override = func.override_orig
+            del func.override_orig
+
+
+# Wrap all op overrides to preserve DefaultPrimitiveTensor - must be called before first override
+default_wrap_override()
+
+
 @arange.override()
 def arange_default(
     *args,
@@ -64,10 +176,10 @@ def argmax_default(
     chunk_size: Optional[int] = None,
 ) -> None:
     if chunk_size is None:
-        return torch.argmax(unbox_tensor(x), dim=dim, keepdim=keepdim)
+        return torch.argmax(x, dim=dim, keepdim=keepdim)
 
     return _split_argmax(
-        unbox_tensor(x),
+        x,
         dim=dim,
         keepdim=keepdim,
         chunk_size=chunk_size,
@@ -75,7 +187,6 @@ def argmax_default(
 
 
 def _split_argmax(input_tensor, dim, keepdim: bool = False, chunk_size: int = 128):
-    input_tensor = unbox_tensor(input_tensor)
     dim = dim if dim >= 0 else input_tensor.dim() + dim
 
     if input_tensor.shape[dim] % chunk_size != 0:
@@ -147,8 +258,6 @@ def attention_mask_for_decode_default(
     *,
     attention_dtype: torch.dtype,
 ) -> torch.Tensor:
-    boolean_input_mask = unbox_tensor(boolean_input_mask)
-
     device = boolean_input_mask.device
     dtype = (
         torch.float32 if attention_dtype == torch.float8_e4m3fnuz else attention_dtype
@@ -162,8 +271,6 @@ def attention_mask_for_decode_default(
 @cat.override(AllOfType(Tensor, PrimitiveTensor))
 def cat_default(tensors: Sequence[Tensor | PrimitiveTensor], dim: int):
     result = torch.cat([unbox_tensor(t) for t in tensors], dim)
-    if isinstance(tensors[0], PrimitiveTensor):
-        result = DefaultPrimitiveTensor(data=result)
     return result
 
 
@@ -192,8 +299,6 @@ def chunked_attention_mask_default(
     assert (
         sl % attention_chunk_size == 0
     ), f"Sequence length ({sl}) must be divisible by attention chunk size ({attention_chunk_size})"
-
-    attention_mask = unbox_tensor(attention_mask)
 
     device = attention_mask.device
     batch_seq_len = attention_mask.shape[2]
@@ -232,10 +337,6 @@ def conv2d_default(
     groups,
     accum_dtype: Optional[torch.dtype],
 ):
-    input = unbox_tensor(input)
-    weight = unbox_tensor(weight)
-    if bias is not None:
-        bias = unbox_tensor(bias)
     if weight.dtype != input.dtype:
         weight = weight.to(input.dtype)
     if bias is not None and bias.dtype != input.dtype:
@@ -268,10 +369,6 @@ def conv3d_default(
     groups,
     accum_dtype: Optional[torch.dtype],
 ):
-    input = unbox_tensor(input)
-    weight = unbox_tensor(weight)
-    if bias is not None:
-        bias = unbox_tensor(bias)
     if weight.dtype != input.dtype:
         weight = weight.to(input.dtype)
     if bias is not None and bias.dtype != input.dtype:
@@ -305,10 +402,6 @@ def conv1d_default(
     groups,
     accum_dtype: Optional[torch.dtype],
 ):
-    input = unbox_tensor(input)
-    weight = unbox_tensor(weight)
-    if bias is not None:
-        bias = unbox_tensor(bias)
     if weight.dtype != input.dtype:
         weight = weight.to(input.dtype)
     if bias is not None and bias.dtype != input.dtype:
@@ -330,7 +423,7 @@ conv1d.override(Tensor, Tensor, auto_dequant=True)(conv1d_default)
 
 @cos.override(Tensor)
 def cos_default(tensor: Tensor) -> Tensor:
-    return torch.cos(unbox_tensor(tensor))
+    return torch.cos(tensor)
 
 
 # Einsum
@@ -410,7 +503,7 @@ def einsum_2args(input0, input1, einsum_str):
         return bhmqk_bkhmd_bqhmd(input0, input1)
     # Default non-QuantizedTensor einsum
     if not isinstance(input1, QuantizedTensor):
-        return torch.einsum(einsum_str, unbox_tensor(input0), unbox_tensor(input1))
+        return torch.einsum(einsum_str, input0, input1)
     # Fallback to other kernels
     return NotImplemented
 
@@ -418,7 +511,6 @@ def einsum_2args(input0, input1, einsum_str):
 # Elementwise
 @elementwise.override(Tensor)
 def elementwise_unary(operator, x, *args, **kwargs):
-    x = unbox_tensor(x)
     return operator(x, *args, **kwargs)
 
 
@@ -428,9 +520,7 @@ def elementwise_unary(operator, x, *args, **kwargs):
     )
 )
 def elementwise_binary(operator, x, y, *args, **kwargs):
-    x = unbox_tensor(x)
-    if isinstance(y, PrimitiveTensor):
-        y = unbox_tensor(y)
+
     return operator(x, y, *args, **kwargs)
 
 
@@ -442,18 +532,13 @@ def elementwise_binary(operator, x, y, *args, **kwargs):
     )
 )
 def elementwise_ternary(operator, x, y, z, *args, **kwargs):
-    x = unbox_tensor(x)
-    if isinstance(y, PrimitiveTensor):
-        y = unbox_tensor(y)
-    if isinstance(z, PrimitiveTensor):
-        z = unbox_tensor(z)
     return operator(x, y, z, *args, **kwargs)
 
 
 # Embedding Lookup
 @embedding_lookup.override(Tensor, Tensor)
 def embedding_lookup_default(input, embedding_matrix, dtype: Optional[dtype]):
-    return F.embedding(unbox_tensor(input), unbox_tensor(embedding_matrix).to(dtype))
+    return F.embedding(input, embedding_matrix.to(dtype))
 
 
 @embedding_lookup.override(Tensor, QuantizedTensor)
@@ -461,17 +546,17 @@ def embedding_lookup_Tensor_QuantizedTensor(
     input, embedding_matrix: QuantizedTensor, dtype: Optional[dtype]
 ):
     dequant = embedding_matrix.unpack().dequant(dtype=dtype)
-    return F.embedding(unbox_tensor(input), dequant)
+    return F.embedding(input, dequant)
 
 
 @equal.override(AllOfType(Tensor, InferenceTensor))
 def equal_default(a: Tensor | InferenceTensor, b: Tensor | InferenceTensor) -> bool:
-    return torch.equal(unbox_tensor(a), unbox_tensor(b))
+    return torch.equal(a, b)
 
 
 @expand.override(Tensor)
 def expand_default(tensor: AnyTensor, shape: List[int]) -> AnyTensor:
-    return unbox_tensor(tensor).expand(*shape)
+    return tensor.expand(*shape)
 
 
 @expand.override(QuantizedTensor)
@@ -495,7 +580,7 @@ def expand_tensor_scaled_layout(
 def flatten_default(
     input: Union[Tensor, PrimitiveTensor], start_dim: int, end_dim: int
 ) -> Tensor:
-    return torch.flatten(unbox_tensor(input), start_dim, end_dim)
+    return torch.flatten(input, start_dim, end_dim)
 
 
 @flatten.override(QuantizedTensor)
@@ -521,12 +606,12 @@ def gather_default(
     dim: int,
     index: Union[Tensor, PrimitiveTensor],
 ) -> Tensor:
-    return torch.gather(unbox_tensor(input), dim, unbox_tensor(index))
+    return torch.gather(input, dim, index)
 
 
 @extract_slice.override(AllOfType(Tensor, PrimitiveTensor))
 def extract_slice_default(tensor, key):
-    return unbox_tensor(tensor)[key]
+    return tensor[key]
 
 
 @extract_slice.override(QuantizedTensor)
@@ -583,9 +668,6 @@ def gemm(
 # Group norm.
 @group_norm_affine.override(Tensor, Tensor, Tensor)
 def group_norm_affine_default(input, weight, bias, *, num_groups, eps):
-    input = unbox_tensor(input)
-    weight = unbox_tensor(weight)
-    bias = unbox_tensor(bias)
     return F.group_norm(input, num_groups=num_groups, weight=weight, bias=bias, eps=eps)
 
 
@@ -596,10 +678,7 @@ def index_copy__default(
     index: Union[Tensor, PrimitiveTensor],
     tensor: Union[Tensor, PrimitiveTensor],
 ) -> Union[Tensor, PrimitiveTensor]:
-    index = unbox_tensor(index)
-    tensor = unbox_tensor(tensor)
-    inout_as_torch = unbox_tensor(inout)
-    if not torch.compiler.is_compiling() and inout_as_torch.dtype in [
+    if not torch.compiler.is_compiling() and inout.dtype in [
         torch.float8_e4m3fnuz,
         torch.float8_e4m3fn,
     ]:
@@ -611,9 +690,9 @@ def index_copy__default(
         # We could maybe be more picky in selecting this path depending on the exact
         # GPU arch and PyTorch ROCm version to determine if there is support to call
         # directly.
-        inout_as_torch = inout_as_torch.view(dtype=torch.int8)
+        inout = inout.view(dtype=torch.int8)
         tensor = tensor.view(dtype=torch.int8)
-    inout_as_torch.index_copy_(dim, index, tensor)
+    inout.index_copy_(dim, index, tensor)
     return inout
 
 
@@ -623,22 +702,20 @@ def index_put__default(
     indices: Tuple[Union[Tensor, PrimitiveTensor]],
     values: Union[Tensor, PrimitiveTensor],
 ) -> Union[Tensor, PrimitiveTensor]:
-    indices = tuple(unbox_tensor(index) for index in indices)
-    inout_as_torch = unbox_tensor(inout)
-    values = unbox_tensor(values)
+    indices = tuple(indices)
     if (
         not torch.compiler.is_compiling()
-        and inout_as_torch.is_cpu
-        and inout_as_torch.dtype in [torch.float8_e4m3fnuz, torch.float8_e4m3fn]
+        and inout.is_cpu
+        and inout.dtype in [torch.float8_e4m3fnuz, torch.float8_e4m3fn]
     ):
         # PyTorch does not have eager implementation for float8_e4m3fnuz in CPU.
         # We need to view as int8 before performing the operation.
         # We still want to avoid the bitcasts during export as the IREE compiler has
         # trouble fusing them.
-        inout_as_torch = inout_as_torch.view(dtype=torch.int8)
+        inout = inout.view(dtype=torch.int8)
         values = values.view(dtype=torch.int8)
 
-    inout_as_torch.index_put_(indices, values)
+    inout.index_put_(indices, values)
     return inout
 
 
@@ -648,13 +725,11 @@ def index_select_default(
     dim: int,
     index: Union[Tensor, PrimitiveTensor],
 ) -> Union[Tensor, PrimitiveTensor]:
-    return torch.index_select(unbox_tensor(tensor), dim, unbox_tensor(index))
+    return torch.index_select(tensor, dim, index)
 
 
 @input_mask.override(Tensor)
 def input_mask_default(seq_lens: torch.Tensor, batch_seqlen: int) -> torch.Tensor:
-    seq_lens = unbox_tensor(seq_lens)
-
     range_vector = torch.arange(0, batch_seqlen, 1, device=seq_lens.device)
     matrix = seq_lens.unsqueeze(dim=-1)
     mask = range_vector >= matrix
@@ -672,7 +747,7 @@ def interpolate_default(
     antialias: bool,
 ) -> Tensor:
     return torch.nn.functional.interpolate(
-        input=unbox_tensor(input),
+        input=input,
         size=size,
         scale_factor=scale_factor,
         mode=mode,
@@ -683,11 +758,10 @@ def interpolate_default(
 
 
 def layer_norm_default(input, weight, bias, *, eps, normalized_shape):
-    input = unbox_tensor(input)
-    if weight is not None:
-        weight = unbox_tensor(weight)
-    if bias is not None:
-        bias = unbox_tensor(bias)
+    if weight is not None and weight.dtype != input.dtype:
+        weight = weight.to(input.dtype)
+    if bias is not None and bias.dtype != input.dtype:
+        bias = bias.to(input.dtype)
     if normalized_shape is None:
         assert weight is not None
         normalized_shape = weight.shape
@@ -703,9 +777,6 @@ layer_norm.override(Tensor, Tensor, Tensor)(layer_norm_default)
 
 # Linear
 def linear_default(input, weight, bias, *, accum_dtype, matmul_impl) -> Tensor:
-    input = unbox_tensor(input)
-    weight = unbox_tensor(weight)
-    bias = None if bias is None else unbox_tensor(bias)
     if weight.dtype != input.dtype:
         weight = weight.to(dtype=input.dtype)
     result = matmul(input, weight, transpose_rhs=True, impl=matmul_impl)
@@ -724,16 +795,12 @@ def masked_fill_default(
     mask: Tensor | PrimitiveTensor,
     value: Number,
 ) -> Union[Tensor, PrimitiveTensor]:
-    tensor = unbox_tensor(tensor)
-    mask = unbox_tensor(mask)
     return tensor.masked_fill(mask, value)
 
 
 # Matmul
 @matmul.override(Tensor, Tensor, auto_dequant=True, impl_name="torch")
 def matmul_default(lhs, rhs, *, transpose_rhs: bool) -> Tensor:
-    lhs = unbox_tensor(lhs)
-    rhs = unbox_tensor(rhs)
     if transpose_rhs:
         rhs = rhs.mT
     rhs = rhs.to(lhs.dtype)
@@ -751,24 +818,24 @@ def matmul_default(lhs, rhs, *, transpose_rhs: bool) -> Tensor:
 def mean_default(
     x: Tensor, dim: Union[int, List[int]], keepdim: bool, *, dtype: torch.dtype
 ) -> None:
-    return torch.mean(unbox_tensor(x), dim=dim, keepdim=keepdim, dtype=dtype)
+    return torch.mean(x, dim=dim, keepdim=keepdim, dtype=dtype)
 
 
 @module_register_buffer.override(torch.nn.Module, Tensor)
 def module_register_buffer_default(
     module: torch.nn.Module, name: str, tensor: Union[Tensor, InferenceTensor]
 ) -> None:
-    return module.register_buffer(name, unbox_tensor(tensor))
+    return module.register_buffer(name, tensor)
 
 
 @repeat.override(Tensor)
 def repeat_default(input: Union[Tensor, PrimitiveTensor], *sizes: List[int]) -> Tensor:
-    return unbox_tensor(input).repeat(*sizes)
+    return input.repeat(*sizes)
 
 
 @reshape.override(Tensor)
 def reshape_default(input: Union[PrimitiveTensor, Tensor], shape: List[int]) -> Tensor:
-    return torch.reshape(unbox_tensor(input), shape)
+    return torch.reshape(input, shape)
 
 
 # RMS norm
@@ -800,13 +867,12 @@ def pad_default(
     mode: str = None,
     value: Optional[float] = None,
 ) -> Tensor:
-    return F.pad(unbox_tensor(input), _pad, mode=mode, value=value)
+    return F.pad(input, _pad, mode=mode, value=value)
 
 
 @permute.override(Tensor)
 def permute(tensor: Tensor, dims: List[int]):
-    torch_tensor = unbox_tensor(tensor)
-    return torch.permute(torch_tensor, dims)
+    return torch.permute(tensor, dims)
 
 
 @scatter_.override(
@@ -824,10 +890,6 @@ def scatter__default(
     *,
     reduce: str | None = None,
 ) -> Tensor:
-    inout = unbox_tensor(inout)
-    index = unbox_tensor(index)
-    if isinstance(src, (torch.Tensor, PrimitiveTensor)):
-        src = unbox_tensor(src)
     if reduce is not None:
         inout.scatter_(dim, index, src, reduce=reduce)
     else:
@@ -842,9 +904,6 @@ def scatter_add_default(
     index: Tensor | PrimitiveTensor,
     src: Tensor | PrimitiveTensor,
 ) -> Tensor:
-    input = unbox_tensor(input)
-    index = unbox_tensor(index)
-    src = unbox_tensor(src)
     return torch.scatter_add(input, dim, index, src)
 
 
@@ -855,7 +914,7 @@ def sigmoid_default(tensor: Tensor) -> Tensor:
 
 @sin.override(Tensor)
 def sin_default(tensor: Tensor) -> Tensor:
-    return torch.sin(unbox_tensor(tensor))
+    return torch.sin(tensor)
 
 
 @softmax.override(Tensor)
@@ -864,7 +923,7 @@ def softmax_default(
     dim: Optional[int],
     dtype: Optional[torch.dtype],
 ) -> Tensor:
-    return F.softmax(unbox_tensor(tensor), dim=dim, dtype=dtype)
+    return F.softmax(tensor, dim=dim, dtype=dtype)
 
 
 @split.override(Tensor)
@@ -873,7 +932,7 @@ def split_default(
     split_size_or_sections: int | list[int],
     dim: int = 0,
 ) -> tuple[Tensor, ...]:
-    return torch.split(unbox_tensor(tensor), split_size_or_sections, dim)
+    return torch.split(tensor, split_size_or_sections, dim)
 
 
 @split.override(IsOfType(QuantizedTensor, SplitPrimitiveTensor))
@@ -910,7 +969,6 @@ def split_via_extract_slice(
 def swiglu_default(
     x: Tensor, *, alpha: float = 1.702, limit: float | None = None
 ) -> Tensor:
-    x = unbox_tensor(x)
     if x.size(-1) % 2 != 0:
         raise ValueError(f"SwiGLU expects even last dim, got {x.size(-1)}")
 
@@ -929,7 +987,7 @@ def swiglu_default(
 
 @to.override(Tensor)
 def to_default(tensor: Tensor, *args, **kwargs) -> PrimitiveTensor:
-    return DefaultPrimitiveTensor(data=unbox_tensor(tensor).to(*args, **kwargs))
+    return tensor.to(*args, **kwargs)
 
 
 @trace_tensor.override(AllOfExprsVariadic(IsOfType(Tensor, InferenceTensor)))
@@ -942,32 +1000,23 @@ def trace_tensor(key: str, *tensors: tuple[AnyTensor, ...]):
 
 @transfer_to_logical_device.override(Tensor)
 def transfer_to_logical_device_default(tensor: Tensor, ordinal: int):
-    transfered = iree.turbine.ops.iree.transfer_to_logical_device(
+    return iree.turbine.ops.iree.transfer_to_logical_device(
         f"{ordinal}", unbox_tensor(tensor)
     )
-    if isinstance(tensor, DefaultPrimitiveTensor):
-        transfered = DefaultPrimitiveTensor(data=transfered, name=tensor.name)
-    return transfered
 
 
 @barrier_on_logical_device.override(Tensor)
 def barrier_on_device_default(tensor: Tensor, ordinal: int):
-    barriered = iree.turbine.ops.iree.barrier_on_logical_device(
+    return iree.turbine.ops.iree.barrier_on_logical_device(
         f"{ordinal}", unbox_tensor(tensor)
     )
-    if isinstance(tensor, DefaultPrimitiveTensor):
-        barriered = DefaultPrimitiveTensor(data=barriered, name=tensor.name)
-    return barriered
 
 
 @transpose.override(Tensor)
 def transpose_default(
     tensor: Union[Tensor, PrimitiveTensor], dim0: int, dim1: int
 ) -> Union[Tensor, PrimitiveTensor]:
-    transposed = torch.transpose(unbox_tensor(tensor), dim0, dim1)
-    if isinstance(tensor, PrimitiveTensor):
-        transposed = DefaultPrimitiveTensor(data=transposed, name=tensor.name)
-    return transposed
+    return torch.transpose(tensor, dim0, dim1)
 
 
 @transpose.override(PlanarQuantizedTensor)
@@ -1011,7 +1060,7 @@ def reduce_scatter_unsharded(
 
 @sharded_cat.override(Tensor)
 def sharded_cat_unsharded(maybe_sharded):
-    return unbox_tensor(maybe_sharded)
+    return maybe_sharded
 
 
 @sharded_gather.override(Tensor)
@@ -1026,7 +1075,7 @@ def sharded_sum_unsharded(tensor: Tensor, root_rank: int) -> Tensor:
             f"sharded_sum destination rank {root_rank} is invalid for"
             f" tensor of type {type(tensor)}. Only rank of 0 is allowed"
         )
-    return unbox_tensor(tensor)
+    return tensor
 
 
 @sum.override(AllOfType(Tensor, PrimitiveTensor))
@@ -1037,19 +1086,19 @@ def sum_default(
     *,
     dtype: torch.dtype,
 ) -> Tensor:
-    return torch.sum(unbox_tensor(input), dim=dim, keepdim=keepdim, dtype=dtype)
+    return torch.sum(input, dim=dim, keepdim=keepdim, dtype=dtype)
 
 
 @unflatten.override(Tensor)
 def unflatten_default(
     input: Union[Tensor, PrimitiveTensor], dim: int, sizes: Tuple[int]
 ) -> Tensor:
-    return torch.unflatten(unbox_tensor(input), dim, sizes)
+    return torch.unflatten(input, dim, sizes)
 
 
 @unsqueeze.override(Tensor)
 def unsqueeze_default(tensor: Union[Tensor, PrimitiveTensor], dim: int) -> Tensor:
-    return torch.unsqueeze(unbox_tensor(tensor), dim)
+    return torch.unsqueeze(tensor, dim)
 
 
 @unsqueeze.override(QuantizedTensor)
@@ -1072,9 +1121,9 @@ def unsqueeze_tensor_scaled_layout(
 @squeeze.override(AllOfType(AnyTensor, PrimitiveTensor))
 def squeeze_default(tensor, dim: Optional[int] = None) -> AnyTensor:
     if dim is None:
-        return torch.squeeze(unbox_tensor(tensor))
+        return torch.squeeze(tensor)
     else:
-        return torch.squeeze(unbox_tensor(tensor), dim)
+        return torch.squeeze(tensor, dim)
 
 
 @topk.override(AllOfType(Tensor, PrimitiveTensor))
@@ -1094,7 +1143,7 @@ def topk_default(
         assert dim == len(tensor.shape) - 1 or dim == -1
         bs_shape = tensor.shape[:-1]
 
-        tensor = unbox_tensor(tensor.flatten(0, -2))
+        tensor = tensor.flatten(0, -2)
         flat_bs = tensor.shape[0]
 
         indices = torch.arange(tensor.shape[1], dtype=torch.int32)[None, :].repeat(
@@ -1125,9 +1174,7 @@ def topk_default(
             tensor, k, dim, largest, sorted, chunk_size, use_linalgext_topk
         )
 
-    result = torch.topk(
-        unbox_tensor(tensor), k=k, dim=dim, largest=largest, sorted=sorted
-    )
+    result = torch.topk(tensor, k=k, dim=dim, largest=largest, sorted=sorted)
     return result.values, result.indices
 
 
@@ -1158,8 +1205,6 @@ def _split_topk(
         Tuple[Tensor, Tensor]: Selected values and indices.
     """
     # TODO(stbaione): Explore more algorithms, like `grouped_argmax` for better perf.
-    tensor = unbox_tensor(tensor)
-
     if k <= 0:
         raise ValueError("k must be positive")
     dim = dim if dim >= 0 else tensor.dim() + dim
@@ -1209,9 +1254,9 @@ def view_default(
         dtype is None
     ), "Exactly one of shape or dtype must be provided"
     if shape is not None:
-        return unbox_tensor(tensor).view(*shape)
+        return tensor.view(*shape)
     else:
-        return unbox_tensor(tensor).view(dtype)
+        return tensor.view(dtype)
 
 
 @view.override(QuantizedTensor)
@@ -1238,12 +1283,12 @@ def view_block_scaled_layout(tensor: QuantizedTensor, shape, dtype):
 
 @view_as_complex.override(Tensor)
 def view_as_complex_default(tensor: Union[Tensor, PrimitiveTensor]) -> Tensor:
-    return torch.view_as_complex(unbox_tensor(tensor))
+    return torch.view_as_complex(tensor)
 
 
 @view_as_real.override(Tensor)
 def view_as_real_default(tensor: Union[Tensor, PrimitiveTensor]) -> Tensor:
-    return torch.view_as_real(unbox_tensor(tensor))
+    return torch.view_as_real(tensor)
 
 
 @zeros_like.override(AllOfType(Tensor, PrimitiveTensor))
@@ -1257,10 +1302,16 @@ def zeros_like_default(
     memory_format: torch.memory_format,
 ) -> Tensor:
     return torch.zeros_like(
-        unbox_tensor(tensor),
+        tensor,
         dtype=dtype,
         layout=layout,
         device=device,
         requires_grad=requires_grad,
         memory_format=memory_format,
     )
+
+
+default_unwrap_override()
+
+
+default_unwrap_override()
