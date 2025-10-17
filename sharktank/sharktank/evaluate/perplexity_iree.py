@@ -459,7 +459,7 @@ class PerplexityIree:
         self.token_ids = torch.as_tensor(self.token_ids, device=self.torch_device)
         self.seq_lens = torch.tensor(self.seq_lens, device=self.torch_device)
 
-        self.batch_indices = torch.arange(len(self.seq_lens))
+        self.batch_indices = ops.arange(len(self.seq_lens))
 
         out_logits = self.get_logits(skip_decode)
 
