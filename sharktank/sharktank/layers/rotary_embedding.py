@@ -8,6 +8,7 @@ from typing import Optional
 
 import torch
 
+import sharktank.ops as ops
 from sharktank.types.tensors import AnyTensor, InferenceTensor, ReplicatedTensor
 
 from .base import BaseLayer

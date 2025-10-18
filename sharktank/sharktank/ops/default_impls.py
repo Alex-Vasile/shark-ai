@@ -668,7 +668,7 @@ def embedding_lookup_Tensor_QuantizedTensor(
 
 @equal.override(AllOfType(Tensor, InferenceTensor))
 def equal_default(a: Tensor | InferenceTensor, b: Tensor | InferenceTensor) -> bool:
-    return torch.equal(a, b)
+    return torch.equal(unbox_tensor(a), unbox_tensor(b))  # Must unbox
 
 
 @expand.override(Tensor)
