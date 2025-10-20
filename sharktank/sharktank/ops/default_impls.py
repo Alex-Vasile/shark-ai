@@ -101,7 +101,7 @@ def default_wrap_override():
             return res
 
         func_wrapper._impl_name = getattr(f, "_impl_name", None)  # For impl selection
-        func_wrapper.__wrapped__ = (
+        func_wrapper._unwrapped = (
             f  # Store reference to original function for _TEST_LAST_OP_DISPATCH
         )
         return func_wrapper
