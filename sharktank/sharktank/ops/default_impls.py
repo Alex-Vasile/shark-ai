@@ -39,6 +39,63 @@ from .signatures import *
 import iree.turbine.ops.iree
 
 
+def preserve_primitive_tensor(f):
+    """
+    Wrapper for each default op to preserve DefaultPrimitiveTensor return type
+    if a DefaultPrimitiveTensor was provided as input.
+    """
+
+    def func_wrapper(*args: Tuple, **kwargs: dict):
+        """
+        Wraps each operation, f, to ensure that if any input is a PrimitiveTensor,
+        the output is wrapped back in DefaultPrimitiveTensor.
+
+        If no PrimitiveTensors are present in the input, then torch.Tensor is returned.
+        """
+        primitive_tensors = []
+        unwrapped_args = []
+
+        # Process args
+        for value in args:
+            if isinstance(value, PrimitiveTensor):
+                primitive_tensors.append(value)
+                unwrapped_args.append(unbox_tensor(value))
+            elif isinstance(value, Sequence) and not isinstance(value, str):
+                unwrapped_list = []
+                for v in value:
+                    if isinstance(v, PrimitiveTensor):
+                        primitive_tensors.append(v)
+                        unwrapped_list.append(unbox_tensor(v))
+                    else:
+                        unwrapped_list.append(v)
+                unwrapped_args.append(type(value)(unwrapped_list))
+            else:
+                unwrapped_args.append(value)
+
+        # Process kwargs
+        unwrapped_kwargs = {}
+        for k, value in kwargs.items():
+            if isinstance(value, PrimitiveTensor):
+                primitive_tensors.append(value)
+                unwrapped_kwargs[k] = unbox_tensor(value)
+            else:
+                unwrapped_kwargs[k] = value
+
+        # Call the underlying function with unwrapped tensors
+        res = f(*unwrapped_args, **unwrapped_kwargs)
+
+        # Re-wrap if input was PrimitiveTensor
+        if len(primitive_tensors) > 0 and isinstance(res, torch.Tensor):
+            res = DefaultPrimitiveTensor(data=res)
+        return res
+
+    func_wrapper._impl_name = getattr(f, "_impl_name", None)  # For impl selection
+    func_wrapper._unwrapped = (
+        f  # Store reference to original function for _TEST_LAST_OP_DISPATCH
+    )
+    return func_wrapper
+
+
 def default_wrap_override():
     """
     Wraps all default op overrides to preserve DefaultPrimitiveTensor type.
@@ -49,62 +106,6 @@ def default_wrap_override():
     3. Calls the underlying function with only torch.Tensors
     4. Re-wraps the result in DefaultPrimitiveTensor if input had PrimitiveTensor
     """
-
-    def preserve_primitive_tensor(f):
-        """
-        Wrapper for each default op to preserve DefaultPrimitiveTensor return type
-        if a DefaultPrimitiveTensor was provided as input.
-        """
-
-        def func_wrapper(*args: Tuple, **kwargs: dict):
-            """
-            Wraps each operation, f, to ensure that if any input is a PrimitiveTensor,
-            the output is wrapped back in DefaultPrimitiveTensor.
-
-            If no PrimitiveTensors are present in the input, then torch.Tensor is returned.
-            """
-            primitive_tensors = []
-            unwrapped_args = []
-
-            # Process args
-            for value in args:
-                if isinstance(value, PrimitiveTensor):
-                    primitive_tensors.append(value)
-                    unwrapped_args.append(unbox_tensor(value))
-                elif isinstance(value, Sequence) and not isinstance(value, str):
-                    unwrapped_list = []
-                    for v in value:
-                        if isinstance(v, PrimitiveTensor):
-                            primitive_tensors.append(v)
-                            unwrapped_list.append(unbox_tensor(v))
-                        else:
-                            unwrapped_list.append(v)
-                    unwrapped_args.append(type(value)(unwrapped_list))
-                else:
-                    unwrapped_args.append(value)
-
-            # Process kwargs
-            unwrapped_kwargs = {}
-            for k, value in kwargs.items():
-                if isinstance(value, PrimitiveTensor):
-                    primitive_tensors.append(value)
-                    unwrapped_kwargs[k] = unbox_tensor(value)
-                else:
-                    unwrapped_kwargs[k] = value
-
-            # Call the underlying function with unwrapped tensors
-            res = f(*unwrapped_args, **unwrapped_kwargs)
-
-            # Re-wrap if input was PrimitiveTensor
-            if len(primitive_tensors) > 0 and isinstance(res, torch.Tensor):
-                res = DefaultPrimitiveTensor(data=res)
-            return res
-
-        func_wrapper._impl_name = getattr(f, "_impl_name", None)  # For impl selection
-        func_wrapper._unwrapped = (
-            f  # Store reference to original function for _TEST_LAST_OP_DISPATCH
-        )
-        return func_wrapper
 
     def wrap_override(signature_dispatcher_override):
         """
