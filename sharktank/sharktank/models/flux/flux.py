@@ -251,7 +251,6 @@ class FluxModelV1(ThetaLayer):
         txt = self.txt_in(txt)
 
         ids = ops.cat((txt_ids, img_ids), dim=1)
-        ids = ops.cat((txt_ids, img_ids), dim=1)
         pe = self.pe_embedder(ids)
 
         for block in self.double_blocks:
