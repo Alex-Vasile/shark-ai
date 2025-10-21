@@ -13,7 +13,12 @@ from parameterized import parameterized
 from sharktank import ops
 from sharktank.types import DefaultPrimitiveTensor, InferenceTensor, ReplicatedTensor
 from sharktank.ops.sharded_impls import zeros_replicated, transfer_n_pin
-from sharktank.ops.default_impls import abs_default, cos_default, zeros_default
+from sharktank.ops.default_impls import (
+    abs_default,
+    cos_default,
+    zeros_default,
+    preserve_primitive_tensor,
+)
 from sharktank.ops._registry import (
     unwrap_if_possible,
     _test_enable_last_op_dispatch,
@@ -78,7 +83,7 @@ class UnwrapIfPossibleTest(unittest.TestCase):
     def test_unwrap_no_wrapper(self):
         self.assertIs(unwrap_if_possible(f), f)
 
-    @parameterized.expand([transfer_n_pin])
+    @parameterized.expand([transfer_n_pin, preserve_primitive_tensor])
     def test_unwrap_with_wrapper(self, wrapping_fn: Callable):
         f_wrapped = wrapping_fn(f)
         self.assertIsNot(f_wrapped, f)
