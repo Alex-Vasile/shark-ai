@@ -60,7 +60,7 @@
 | sharktank/sharktank/layers/paged\_llama\_attention\_block.py                  |      167 |       26 |     84% |93-97, 121-122, 156, 183-203, 342-351, 383, 385, 387, 515-517 |
 | sharktank/sharktank/layers/rotary\_embedding.py                               |       36 |        0 |    100% |           |
 | sharktank/sharktank/layers/rotary\_embedding\_hf.py                           |      121 |        3 |     98% |104, 252-253 |
-| sharktank/sharktank/layers/testing.py                                         |       44 |        1 |     98% |       302 |
+| sharktank/sharktank/layers/testing.py                                         |       67 |       21 |     69% |302, 372-384, 390, 434-473 |
 | sharktank/sharktank/layers/token\_embedding.py                                |       12 |        0 |    100% |           |
 | sharktank/sharktank/models/\_\_init\_\_.py                                    |        7 |        0 |    100% |           |
 | sharktank/sharktank/models/clip/\_\_init\_\_.py                               |        2 |        0 |    100% |           |
@@ -162,7 +162,7 @@
 | sharktank/sharktank/utils/math.py                                             |       12 |        5 |     58% | 17, 25-28 |
 | sharktank/sharktank/utils/misc.py                                             |       58 |        9 |     84% |35, 100, 108-114 |
 | sharktank/sharktank/utils/patching.py                                         |      137 |       46 |     66% |138, 141, 166, 203-206, 215-221, 226, 236-261, 269-285, 288-299, 328, 362, 364 |
-| sharktank/sharktank/utils/random.py                                           |       23 |        0 |    100% |           |
+| sharktank/sharktank/utils/random.py                                           |       38 |        0 |    100% |           |
 | sharktank/sharktank/utils/testing.py                                          |      455 |      208 |     54% |104-106, 157-268, 291-297, 308, 321-331, 344-368, 374-395, 411-420, 425-438, 442-446, 485-569, 604, 657-660, 697-703, 734, 758-766, 781, 786, 792-796, 804-807, 813-820, 828-832, 900, 949, 954-968, 1003, 1042, 1067-1069, 1080, 1086, 1096, 1099, 1141 |
 | sharktank/sharktank/utils/tokenizer.py                                        |       51 |       35 |     31% |34-38, 42-46, 50, 63-66, 69-72, 76, 80-81, 85-110 |
 | sharktank/sharktank/utils/tree.py                                             |       71 |        2 |     97% |   81, 220 |
@@ -253,9 +253,10 @@
 | sharktank/tests/utils/llm\_utils\_test.py                                     |       85 |        0 |    100% |           |
 | sharktank/tests/utils/misc\_test.py                                           |        9 |        0 |    100% |           |
 | sharktank/tests/utils/patching\_test.py                                       |       81 |        0 |    100% |           |
+| sharktank/tests/utils/random\_test.py                                         |       23 |        0 |    100% |           |
 | sharktank/tests/utils/testing\_test.py                                        |      132 |        0 |    100% |           |
 | sharktank/tests/utils/tree\_test.py                                           |       20 |        0 |    100% |           |
-|                                                                     **TOTAL** | **24770** | **5527** | **78%** |           |
+|                                                                     **TOTAL** | **24831** | **5547** | **78%** |           |
 
 
 ## Setup coverage badge
